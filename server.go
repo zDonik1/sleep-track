@@ -3,7 +3,10 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"os"
+	"slices"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -11,6 +14,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -25,6 +30,10 @@ type Interval struct {
 	Quality int       `json:"quality"`
 }
 
+type Config struct {
+	LogFormat string `mapstructure:"log-format"`
+}
+
 const (
 	COST = 8
 )
@@ -35,10 +44,42 @@ var (
 	intervals = map[string][]Interval{}
 )
 
-func main() {
+func setupConfig() (*Config, error) {
+	var config Config
+	pflag.StringP("log-format", "l", "text", "Set log format [text, json]")
+	pflag.Parse()
+	viper.BindPFlags(pflag.CommandLine)
+	viper.Unmarshal(&config)
+
+	if !slices.Contains([]string{"text", "json"}, config.LogFormat) {
+		return nil, fmt.Errorf("Allowed values for --log-format (-l): [text, json]. Given '%s'",
+			config.LogFormat)
+	}
+	return &config, nil
+}
+
+func setupEcho(conf *Config) *echo.Echo {
 	e := echo.New()
 	e.Logger.SetLevel(log.DEBUG)
-	e.Use(middleware.Logger())
+
+	if conf.LogFormat == "text" {
+		e.Logger.SetHeader("${time_rfc3339} ${level} ${prefix} ${short_file}:${line}")
+		e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Format: "${time_rfc3339} http " +
+			"${remote_ip} ${method} ${uri} => ${status} ${error}"}))
+	} else {
+		e.Use(middleware.Logger())
+	}
+	return e
+}
+
+func main() {
+	conf, err := setupConfig()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	e := setupEcho(conf)
 
 	e.POST("/login", func(c echo.Context) error {
 		unameCookie, err := c.Cookie("user")
