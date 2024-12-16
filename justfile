@@ -10,3 +10,8 @@ help:
 [group("nix develop")]
 dev:
     nix develop -c nu
+
+# start server
+[group("nix develop")]
+run:
+    nix develop -c go run server.go

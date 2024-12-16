@@ -81,36 +81,31 @@ func main() {
 
 	e := setupEcho(conf)
 
-	e.POST("/login", func(c echo.Context) error {
-		unameCookie, err := c.Cookie("user")
-		if err != nil {
-			return err
-		}
-		username := unameCookie.Name
-
-		passCookie, err := c.Cookie("password")
-		if err != nil {
-			return err
-		}
-		password := passCookie.Name
-
-		// add new or check existing user
+	loginGroup := e.Group("/login", middleware.BasicAuth(func(username, pass string, c echo.Context) (bool, error) {
 		user, ok := users[username]
 		if !ok {
-			hash, err := bcrypt.GenerateFromPassword([]byte(password), COST)
+			hash, err := bcrypt.GenerateFromPassword([]byte(pass), COST)
 			if err != nil {
-				return err
+				return false, err
 			}
 			users[username] = User{Name: username, PassHash: hash}
 			e.Logger.Infof("New user signed up: %s", username)
 		} else {
-			if err := bcrypt.CompareHashAndPassword(user.PassHash, []byte(password)); err != nil {
-				return err
+			if err := bcrypt.CompareHashAndPassword(user.PassHash, []byte(pass)); err != nil {
+				return false, err
 			}
-			e.Logger.Infof("Existing user signed in: %s", username)
+			c.Logger().Infof("Existing user signed in: %s", username)
+		}
+		c.Set("user", username)
+		return true, nil
+	}))
+	loginGroup.POST("", func(c echo.Context) error {
+		username, ok := c.Get("user").(string)
+		if !ok {
+			c.Logger().Error("could not cast username to string")
+			return c.String(http.StatusUnauthorized, "Invalid username")
 		}
 
-		// return token
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 			"sub": username,
 			"exp": jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
@@ -122,9 +117,7 @@ func main() {
 		return c.String(http.StatusOK, s)
 	})
 
-	intervalsGroup := e.Group("/intervals")
-	intervalsGroup.Use(echojwt.JWT(key))
-
+	intervalsGroup := e.Group("/intervals", echojwt.JWT(key))
 	intervalsGroup.POST("", func(c echo.Context) error {
 		token, ok := c.Get("user").(*jwt.Token)
 		if !ok {
