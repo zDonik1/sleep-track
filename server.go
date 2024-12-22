@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -86,13 +85,13 @@ func main() {
 		if !ok {
 			hash, err := bcrypt.GenerateFromPassword([]byte(pass), COST)
 			if err != nil {
-				return false, err
+				return false, echo.NewHTTPError(http.StatusUnauthorized, err)
 			}
 			users[username] = User{Name: username, PassHash: hash}
-			e.Logger.Infof("New user signed up: %s", username)
+			c.Logger().Infof("New user signed up: %s", username)
 		} else {
 			if err := bcrypt.CompareHashAndPassword(user.PassHash, []byte(pass)); err != nil {
-				return false, err
+				return false, echo.NewHTTPError(http.StatusUnauthorized, err)
 			}
 			c.Logger().Infof("Existing user signed in: %s", username)
 		}
@@ -102,8 +101,7 @@ func main() {
 	loginGroup.POST("", func(c echo.Context) error {
 		username, ok := c.Get("user").(string)
 		if !ok {
-			c.Logger().Error("could not cast username to string")
-			return c.String(http.StatusUnauthorized, "Invalid username")
+			return echo.NewHTTPError(http.StatusUnauthorized, "Invalid username")
 		}
 
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -121,30 +119,30 @@ func main() {
 	intervalsGroup.POST("", func(c echo.Context) error {
 		token, ok := c.Get("user").(*jwt.Token)
 		if !ok {
-			return errors.New("JWT token missing or invalid")
+			return echo.NewHTTPError(http.StatusUnauthorized, "JWT token missing or invalid")
 		}
 
 		expiration, err := token.Claims.GetExpirationTime()
 		if err != nil {
-			return err
+			return echo.NewHTTPError(http.StatusUnauthorized, err)
 		}
 		if time.Now().Compare(expiration.Time) > 0 {
-			return c.String(http.StatusUnauthorized, "JWT token is expired")
+			return echo.NewHTTPError(http.StatusUnauthorized, "JWT token is expired")
 		}
 
 		username, err := token.Claims.GetSubject()
 		if err != nil {
-			return err
+			return echo.NewHTTPError(http.StatusUnauthorized, err)
 		}
 
 		interval := Interval{}
 		err = json.NewDecoder(c.Request().Body).Decode(&interval)
 		if err != nil {
-			return err
+			return echo.NewHTTPError(http.StatusBadRequest, err)
 		}
 
 		intervals[username] = append(intervals[username], interval)
-		e.Logger.Debug(intervals[username])
+		e.Logger.Infof("interval %v added for user %s", intervals[username], username)
 		return c.NoContent(http.StatusOK)
 	})
 
