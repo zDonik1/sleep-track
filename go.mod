@@ -1,4 +1,4 @@
-module time-track
+module github.com/zDonik1/sleep-track
 
 go 1.23.3
 
