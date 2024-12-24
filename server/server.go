@@ -27,19 +27,26 @@ const (
 )
 
 var (
-	key       = []byte("secret")
-	users     = map[string]User{}
-	intervals = map[string][]Interval{}
+	key = []byte("secret")
 )
 
-func AuthenticateUser(username, pass string, c echo.Context) (bool, error) {
-	user, ok := users[username]
+type Server struct {
+	users     map[string]User
+	intervals map[string][]Interval
+}
+
+func New() *Server {
+	return &Server{users: make(map[string]User), intervals: make(map[string][]Interval)}
+}
+
+func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, error) {
+	user, ok := s.users[username]
 	if !ok {
 		hash, err := bcrypt.GenerateFromPassword([]byte(pass), COST)
 		if err != nil {
 			return false, echo.NewHTTPError(http.StatusUnauthorized, err)
 		}
-		users[username] = User{Name: username, PassHash: hash}
+		s.users[username] = User{Name: username, PassHash: hash}
 		c.Logger().Infof("New user signed up: %s", username)
 	} else {
 		if err := bcrypt.CompareHashAndPassword(user.PassHash, []byte(pass)); err != nil {
@@ -51,7 +58,7 @@ func AuthenticateUser(username, pass string, c echo.Context) (bool, error) {
 	return true, nil
 }
 
-func LoginUser(c echo.Context) error {
+func (s *Server) LoginUser(c echo.Context) error {
 	username, ok := c.Get("user").(string)
 	if !ok {
 		return echo.NewHTTPError(http.StatusUnauthorized, "Invalid username")
@@ -61,18 +68,14 @@ func LoginUser(c echo.Context) error {
 		"sub": username,
 		"exp": jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 	})
-	s, err := token.SignedString(key)
+	strTok, err := token.SignedString(key)
 	if err != nil {
 		return err
 	}
-	return c.String(http.StatusOK, s)
+	return c.String(http.StatusOK, strTok)
 }
 
-func GetJwtMiddleware() echo.MiddlewareFunc {
-	return echojwt.JWT(key)
-}
-
-func CreateInterval(c echo.Context) error {
+func (s *Server) CreateInterval(c echo.Context) error {
 	token, ok := c.Get("user").(*jwt.Token)
 	if !ok {
 		return echo.NewHTTPError(http.StatusUnauthorized, "JWT token missing or invalid")
@@ -97,7 +100,11 @@ func CreateInterval(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	intervals[username] = append(intervals[username], interval)
-	c.Logger().Infof("interval %v added for user %s", intervals[username], username)
+	s.intervals[username] = append(s.intervals[username], interval)
+	c.Logger().Infof("interval %v added for user %s", s.intervals[username], username)
 	return c.NoContent(http.StatusOK)
+}
+
+func GetJwtMiddleware() echo.MiddlewareFunc {
+	return echojwt.JWT(key)
 }
