@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -55,13 +56,18 @@ func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, 
 		c.Logger().Infof("Existing user signed in: %s", username)
 	}
 	c.Set("user", username)
+	c.Set("created", !ok)
 	return true, nil
 }
 
 func (s *Server) LoginUser(c echo.Context) error {
 	username, ok := c.Get("user").(string)
 	if !ok {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Invalid username")
+		return errors.New("could not cast context field 'user' to string")
+	}
+	created, ok := c.Get("created").(bool)
+	if !ok {
+		return errors.New("could not cast context field 'created' to bool")
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -72,7 +78,12 @@ func (s *Server) LoginUser(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.String(http.StatusOK, strTok)
+
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	return c.String(status, strTok)
 }
 
 func (s *Server) CreateInterval(c echo.Context) error {
@@ -102,7 +113,7 @@ func (s *Server) CreateInterval(c echo.Context) error {
 
 	s.intervals[username] = append(s.intervals[username], interval)
 	c.Logger().Infof("interval %v added for user %s", s.intervals[username], username)
-	return c.NoContent(http.StatusOK)
+	return c.NoContent(http.StatusCreated)
 }
 
 func GetJwtMiddleware() echo.MiddlewareFunc {
