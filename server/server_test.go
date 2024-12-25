@@ -12,10 +12,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var TEST_TIME = time.Date(2024, time.January, 12, 5, 55, 35, 150, time.UTC)
+
+func TestAddExpiryDuration(t *testing.T) {
+	assert.Equal(t, TEST_TIME.Add(24*time.Hour), addExpiryDuration(TEST_TIME))
+}
+
 func TestLoginUser_UserDidntExist(t *testing.T) {
 	e := echo.New()
 	s := New()
-	s.now = func() time.Time { return time.Date(2024, time.January, 12, 5, 55, 35, 150, time.UTC) }
+	s.now = func() time.Time { return TEST_TIME }
 	loginGroup := e.Group("/login", middleware.BasicAuth(s.AuthenticateUser))
 	loginGroup.POST("", s.LoginUser)
 

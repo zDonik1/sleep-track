@@ -78,7 +78,7 @@ func (s *Server) LoginUser(c echo.Context) error {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": username,
-		"exp": jwt.NewNumericDate(s.now().Add(24 * time.Hour)),
+		"exp": jwt.NewNumericDate(addExpiryDuration(s.now())),
 	})
 	strTok, err := token.SignedString(key)
 	if err != nil {
@@ -124,4 +124,8 @@ func (s *Server) CreateInterval(c echo.Context) error {
 
 func GetJwtMiddleware() echo.MiddlewareFunc {
 	return echojwt.JWT(key)
+}
+
+func addExpiryDuration(t time.Time) time.Time {
+	return t.Add(24 * time.Hour)
 }
