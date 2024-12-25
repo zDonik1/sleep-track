@@ -34,10 +34,16 @@ var (
 type Server struct {
 	users     map[string]User
 	intervals map[string][]Interval
+
+	now func() time.Time
 }
 
 func New() *Server {
-	return &Server{users: make(map[string]User), intervals: make(map[string][]Interval)}
+	return &Server{
+		users:     make(map[string]User),
+		intervals: make(map[string][]Interval),
+		now:       func() time.Time { return time.Now() },
+	}
 }
 
 func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, error) {
@@ -72,7 +78,7 @@ func (s *Server) LoginUser(c echo.Context) error {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": username,
-		"exp": jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+		"exp": jwt.NewNumericDate(s.now().Add(24 * time.Hour)),
 	})
 	strTok, err := token.SignedString(key)
 	if err != nil {
