@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -28,7 +29,8 @@ const (
 )
 
 var (
-	key = []byte("secret")
+	key           = []byte("secret")
+	jwtSignMethod = jwt.SigningMethodHS256
 )
 
 type Server struct {
@@ -76,7 +78,7 @@ func (s *Server) LoginUser(c echo.Context) error {
 		return errors.New("could not cast context field 'created' to bool")
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	token := jwt.NewWithClaims(jwtSignMethod, jwt.MapClaims{
 		"sub": username,
 		"exp": jwt.NewNumericDate(addExpiryDuration(s.now())),
 	})
@@ -95,7 +97,7 @@ func (s *Server) LoginUser(c echo.Context) error {
 func (s *Server) CreateInterval(c echo.Context) error {
 	token, ok := c.Get("user").(*jwt.Token)
 	if !ok {
-		return echo.NewHTTPError(http.StatusUnauthorized, "JWT token missing or invalid")
+		return errors.New("could not cast context field 'user' to *jwt.Token")
 	}
 
 	username, err := token.Claims.GetSubject()
@@ -114,8 +116,31 @@ func (s *Server) CreateInterval(c echo.Context) error {
 	return c.NoContent(http.StatusCreated)
 }
 
-func GetJwtMiddleware() echo.MiddlewareFunc {
-	return echojwt.JWT(key)
+func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
+	keyFunc := func(token *jwt.Token) (interface{}, error) {
+		if token.Method.Alg() != jwtSignMethod.Alg() {
+			return nil, &echojwt.TokenError{Token: token, Err: fmt.Errorf("unexpected jwt signing method=%v", token.Header["alg"])}
+		}
+		return key, nil
+	}
+
+	return echojwt.WithConfig(echojwt.Config{
+		ParseTokenFunc: func(c echo.Context, auth string) (interface{}, error) {
+			token, err := jwt.ParseWithClaims(
+				auth,
+				jwt.MapClaims{},
+				keyFunc,
+				jwt.WithTimeFunc(s.now),
+			)
+			if err != nil {
+				return nil, &echojwt.TokenError{Token: token, Err: err}
+			}
+			if !token.Valid {
+				return nil, &echojwt.TokenError{Token: token, Err: errors.New("invalid token")}
+			}
+			return token, nil
+		},
+	})
 }
 
 func addExpiryDuration(t time.Time) time.Time {

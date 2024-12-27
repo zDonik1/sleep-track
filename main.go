@@ -56,10 +56,9 @@ func main() {
 	e := setupEcho(conf)
 	s := server.New()
 
-	loginGroup := e.Group("/login", middleware.BasicAuth(s.AuthenticateUser))
-	loginGroup.POST("", s.LoginUser)
+	e.POST("/login", s.LoginUser, middleware.BasicAuth(s.AuthenticateUser))
 
-	intervalsGroup := e.Group("/intervals", server.GetJwtMiddleware())
+	intervalsGroup := e.Group("/intervals", s.JwtMiddleware())
 	intervalsGroup.POST("", s.CreateInterval)
 
 	e.Logger.Fatal(e.Start(":8001"))

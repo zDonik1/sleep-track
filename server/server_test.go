@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +20,7 @@ const (
 	TEST_USER    = "testuser"
 	TEST_PASS    = "testpass"
 	ANOTHER_PASS = "otherpass"
+	// JWT with sub = "testuser", exp = "2024-01-13T05:55:35.15Z"
 	EXPECTED_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
 		"eyJleHAiOjE3MDUxMjUzMzUsInN1YiI6InRlc3R1c2VyIn0." +
 		"W4s_64lN7Ob8NIj2Yf1sVfO5PiPyZbPI-UE0s6MLi2c"
@@ -83,7 +86,49 @@ func (s *ServerSuite) TestLoginUser_WrongPassword() {
 		s.rec.Body.String())
 }
 
-func TestLoginSuite(t *testing.T) {
+func (s *ServerSuite) TestCreateInterval() {
+	start := time.Date(2024, time.January, 12, 21, 0, 0, 0, time.UTC)
+	data := []struct {
+		Name           string
+		Interval       Interval
+		SetupUser      bool
+		ExpectedStatus int
+		ExpectedBody   string
+	}{
+		{
+			Name:           "ValidInterval",
+			Interval:       Interval{Start: start, End: start.Add(8 * time.Hour), Quality: 1},
+			SetupUser:      true,
+			ExpectedStatus: http.StatusCreated,
+			ExpectedBody:   "",
+		},
+	}
+
+	for _, d := range data {
+		s.Run(d.Name, func() {
+			body, err := json.Marshal(map[string]any{
+				"start":   d.Interval.Start,
+				"end":     d.Interval.End,
+				"quality": 1,
+			})
+			s.Require().NoError(err)
+
+			if d.SetupUser {
+				s.setupDbWithUser()
+			}
+			s.ech.POST("/intervals", s.serv.CreateInterval, s.serv.JwtMiddleware())
+			req := httptest.NewRequest(http.MethodPost, "/intervals", bytes.NewReader(body))
+			req.Header.Add("Authorization", "Bearer "+EXPECTED_JWT)
+
+			s.ech.ServeHTTP(s.rec, req)
+
+			s.Equal(d.ExpectedStatus, s.rec.Result().StatusCode)
+			s.Equal(d.ExpectedBody, s.rec.Body.String())
+		})
+	}
+}
+
+func TestServerSuite(t *testing.T) {
 	suite.Run(t, new(ServerSuite))
 }
 
@@ -94,6 +139,10 @@ func TestLoginSuite(t *testing.T) {
 func TestAddExpiryDuration(t *testing.T) {
 	assert.Equal(t, TEST_TIME.Add(24*time.Hour), addExpiryDuration(TEST_TIME))
 }
+
+// ------------------------------------------------
+// HELPERS
+// ------------------------------------------------
 
 func jsonMes(mes string) string {
 	return fmt.Sprintf(`{"message":"%s"}`+"\n", mes)
