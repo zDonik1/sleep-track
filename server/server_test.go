@@ -40,26 +40,14 @@ func (s *ServerSuite) SetupTest() {
 	s.rec = httptest.NewRecorder()
 }
 
-// ------------------------------------------------
-// LOGIN SUITE
-// ------------------------------------------------
-
-type LoginSuite struct {
-	ServerSuite
-}
-
-func (s *LoginSuite) SetupTest() {
-	s.ServerSuite.SetupTest()
-	s.ech.POST("/login", s.serv.LoginUser, middleware.BasicAuth(s.serv.AuthenticateUser))
-}
-
-func (s *LoginSuite) setupDbWithUser() {
+func (s *ServerSuite) setupDbWithUser() {
 	hash, err := bcrypt.GenerateFromPassword([]byte(TEST_PASS), COST)
 	s.NoError(err)
 	s.serv.users[TEST_USER] = User{Name: TEST_USER, PassHash: hash}
 }
 
-func (s *LoginSuite) TestLoginUser_UserDidntExist() {
+func (s *ServerSuite) TestLoginUser_UserDidntExist() {
+	s.ech.POST("/login", s.serv.LoginUser, middleware.BasicAuth(s.serv.AuthenticateUser))
 	req := httptest.NewRequest(http.MethodPost, "/login", nil)
 	req.SetBasicAuth(TEST_USER, TEST_PASS)
 
@@ -69,8 +57,9 @@ func (s *LoginSuite) TestLoginUser_UserDidntExist() {
 	s.Equal(EXPECTED_JWT, s.rec.Body.String())
 }
 
-func (s *LoginSuite) TestLoginUser_UserExisted() {
+func (s *ServerSuite) TestLoginUser_UserExisted() {
 	s.setupDbWithUser()
+	s.ech.POST("/login", s.serv.LoginUser, middleware.BasicAuth(s.serv.AuthenticateUser))
 	req := httptest.NewRequest(http.MethodPost, "/login", nil)
 	req.SetBasicAuth(TEST_USER, TEST_PASS)
 
@@ -80,8 +69,9 @@ func (s *LoginSuite) TestLoginUser_UserExisted() {
 	s.Equal(EXPECTED_JWT, s.rec.Body.String())
 }
 
-func (s *LoginSuite) TestLoginUser_WrongPassword() {
+func (s *ServerSuite) TestLoginUser_WrongPassword() {
 	s.setupDbWithUser()
+	s.ech.POST("/login", s.serv.LoginUser, middleware.BasicAuth(s.serv.AuthenticateUser))
 	req := httptest.NewRequest(http.MethodPost, "/login", nil)
 	req.SetBasicAuth(TEST_USER, ANOTHER_PASS)
 
@@ -94,11 +84,11 @@ func (s *LoginSuite) TestLoginUser_WrongPassword() {
 }
 
 func TestLoginSuite(t *testing.T) {
-	suite.Run(t, new(LoginSuite))
+	suite.Run(t, new(ServerSuite))
 }
 
 // ------------------------------------------------
-// OTHER TEST
+// OTHER TESTS
 // ------------------------------------------------
 
 func TestAddExpiryDuration(t *testing.T) {
