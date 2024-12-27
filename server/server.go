@@ -98,14 +98,6 @@ func (s *Server) CreateInterval(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, "JWT token missing or invalid")
 	}
 
-	expiration, err := token.Claims.GetExpirationTime()
-	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, err)
-	}
-	if time.Now().Compare(expiration.Time) > 0 {
-		return echo.NewHTTPError(http.StatusUnauthorized, "JWT token is expired")
-	}
-
 	username, err := token.Claims.GetSubject()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, err)
