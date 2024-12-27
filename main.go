@@ -38,8 +38,8 @@ func setupEcho(conf *Config) *echo.Echo {
 
 	if conf.LogFormat == "text" {
 		e.Logger.SetHeader("${time_rfc3339} ${level} ${prefix} ${short_file}:${line}")
-		e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Format: "${time_rfc3339} http " +
-			"${remote_ip} ${method} ${uri} => ${status} ${error}"}))
+		e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Format: "${time_rfc3339} " +
+			"http ${remote_ip} ${method} ${uri} => ${status} ${error}\n"}))
 	} else {
 		e.Use(middleware.Logger())
 	}
