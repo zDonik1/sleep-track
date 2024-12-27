@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -32,9 +31,6 @@ type ServerSuite struct {
 	ech  *echo.Echo
 	serv *Server
 	rec  *httptest.ResponseRecorder
-
-	// should be setup by inheriting suites
-	req *http.Request
 }
 
 func (s *ServerSuite) SetupTest() {
@@ -42,10 +38,6 @@ func (s *ServerSuite) SetupTest() {
 	s.serv = New()
 	s.serv.now = func() time.Time { return TEST_TIME }
 	s.rec = httptest.NewRecorder()
-}
-
-func (s *ServerSuite) serve() {
-	s.ech.ServeHTTP(s.rec, s.req)
 }
 
 // ------------------------------------------------
@@ -59,7 +51,6 @@ type LoginSuite struct {
 func (s *LoginSuite) SetupTest() {
 	s.ServerSuite.SetupTest()
 	s.ech.POST("/login", s.serv.LoginUser, middleware.BasicAuth(s.serv.AuthenticateUser))
-	s.req = httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(""))
 }
 
 func (s *LoginSuite) setupDbWithUser() {
@@ -69,9 +60,10 @@ func (s *LoginSuite) setupDbWithUser() {
 }
 
 func (s *LoginSuite) TestLoginUser_UserDidntExist() {
-	s.req.SetBasicAuth(TEST_USER, TEST_PASS)
+	req := httptest.NewRequest(http.MethodPost, "/login", nil)
+	req.SetBasicAuth(TEST_USER, TEST_PASS)
 
-	s.serve()
+	s.ech.ServeHTTP(s.rec, req)
 
 	s.Equal(http.StatusCreated, s.rec.Code)
 	s.Equal(EXPECTED_JWT, s.rec.Body.String())
@@ -79,9 +71,10 @@ func (s *LoginSuite) TestLoginUser_UserDidntExist() {
 
 func (s *LoginSuite) TestLoginUser_UserExisted() {
 	s.setupDbWithUser()
-	s.req.SetBasicAuth(TEST_USER, TEST_PASS)
+	req := httptest.NewRequest(http.MethodPost, "/login", nil)
+	req.SetBasicAuth(TEST_USER, TEST_PASS)
 
-	s.serve()
+	s.ech.ServeHTTP(s.rec, req)
 
 	s.Equal(http.StatusOK, s.rec.Code)
 	s.Equal(EXPECTED_JWT, s.rec.Body.String())
@@ -89,9 +82,10 @@ func (s *LoginSuite) TestLoginUser_UserExisted() {
 
 func (s *LoginSuite) TestLoginUser_WrongPassword() {
 	s.setupDbWithUser()
-	s.req.SetBasicAuth(TEST_USER, ANOTHER_PASS)
+	req := httptest.NewRequest(http.MethodPost, "/login", nil)
+	req.SetBasicAuth(TEST_USER, ANOTHER_PASS)
 
-	s.serve()
+	s.ech.ServeHTTP(s.rec, req)
 
 	s.Equal(http.StatusUnauthorized, s.rec.Code)
 	s.Equal(
