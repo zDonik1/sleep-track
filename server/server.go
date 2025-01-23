@@ -111,6 +111,9 @@ func (s *Server) CreateInterval(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
+	if interval.Start.Compare(interval.End) != -1 {
+		return echo.NewHTTPError(http.StatusBadRequest, "interval end is the same or before start")
+	}
 	s.intervals[username] = append(s.intervals[username], interval)
 	c.Logger().Infof("interval %v added for user %s", s.intervals[username], username)
 	return c.NoContent(http.StatusCreated)

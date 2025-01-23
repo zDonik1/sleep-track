@@ -37,6 +37,14 @@ type ServerSuite struct {
 }
 
 func (s *ServerSuite) SetupTest() {
+	s.setup()
+}
+
+func (s *ServerSuite) SetupSubTest() {
+	s.setup()
+}
+
+func (s *ServerSuite) setup() {
 	s.ech = echo.New()
 	s.serv = New()
 	s.serv.now = func() time.Time { return TEST_TIME }
@@ -88,6 +96,7 @@ func (s *ServerSuite) TestLoginUser_WrongPassword() {
 
 func (s *ServerSuite) TestCreateInterval() {
 	start := time.Date(2024, time.January, 12, 21, 0, 0, 0, time.UTC)
+	end := start.Add(8 * time.Hour)
 	data := []struct {
 		Name           string
 		Interval       Interval
@@ -97,10 +106,17 @@ func (s *ServerSuite) TestCreateInterval() {
 	}{
 		{
 			Name:           "ValidInterval",
-			Interval:       Interval{Start: start, End: start.Add(8 * time.Hour), Quality: 1},
+			Interval:       Interval{Start: start, End: end, Quality: 1},
 			SetupUser:      true,
 			ExpectedStatus: http.StatusCreated,
 			ExpectedBody:   "",
+		},
+		{
+			Name:           "EndBeforeStart",
+			Interval:       Interval{Start: end, End: start, Quality: 1},
+			SetupUser:      true,
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes("interval end is the same or before start"),
 		},
 	}
 
