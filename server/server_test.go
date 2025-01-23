@@ -97,23 +97,34 @@ func (s *ServerSuite) TestLoginUser_WrongPassword() {
 func (s *ServerSuite) TestCreateInterval() {
 	start := time.Date(2024, time.January, 12, 21, 0, 0, 0, time.UTC)
 	end := start.Add(8 * time.Hour)
+
+	makeJsonBody := func(interval Interval) []byte {
+		body, err := json.Marshal(map[string]any{
+			"start":   interval.Start,
+			"end":     interval.End,
+			"quality": interval.Quality,
+		})
+		s.Require().NoError(err)
+		return body
+	}
+
 	data := []struct {
 		Name           string
-		Interval       Interval
+		Body           []byte
 		SetupUser      bool
 		ExpectedStatus int
 		ExpectedBody   string
 	}{
 		{
 			Name:           "ValidInterval",
-			Interval:       Interval{Start: start, End: end, Quality: 1},
+			Body:           makeJsonBody(Interval{Start: start, End: end, Quality: 1}),
 			SetupUser:      true,
 			ExpectedStatus: http.StatusCreated,
 			ExpectedBody:   "",
 		},
 		{
 			Name:           "EndBeforeStart",
-			Interval:       Interval{Start: end, End: start, Quality: 1},
+			Body:           makeJsonBody(Interval{Start: end, End: start, Quality: 1}),
 			SetupUser:      true,
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("interval end is the same or before start"),
@@ -122,18 +133,11 @@ func (s *ServerSuite) TestCreateInterval() {
 
 	for _, d := range data {
 		s.Run(d.Name, func() {
-			body, err := json.Marshal(map[string]any{
-				"start":   d.Interval.Start,
-				"end":     d.Interval.End,
-				"quality": 1,
-			})
-			s.Require().NoError(err)
-
 			if d.SetupUser {
 				s.setupDbWithUser()
 			}
 			s.ech.POST("/intervals", s.serv.CreateInterval, s.serv.JwtMiddleware())
-			req := httptest.NewRequest(http.MethodPost, "/intervals", bytes.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/intervals", bytes.NewReader(d.Body))
 			req.Header.Add("Authorization", "Bearer "+EXPECTED_JWT)
 
 			s.ech.ServeHTTP(s.rec, req)
