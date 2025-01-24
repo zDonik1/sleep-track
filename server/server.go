@@ -19,9 +19,36 @@ type User struct {
 }
 
 type Interval struct {
-	Start   time.Time `json:"start"`
-	End     time.Time `json:"end"`
-	Quality int       `json:"quality"`
+	Start   time.Time
+	End     time.Time
+	Quality int
+}
+
+func (i *Interval) UnmarshalJSON(b []byte) error {
+	var interval struct {
+		Start   *time.Time `json:"start"`
+		End     *time.Time `json:"end"`
+		Quality *int       `json:"quality"`
+	}
+	err := json.Unmarshal(b, &interval)
+	if err != nil {
+		return err
+	}
+
+	if interval.Start == nil {
+		return errors.New("missing \"start\" field")
+	}
+	if interval.End == nil {
+		return errors.New("missing \"end\" field")
+	}
+	if interval.Quality == nil {
+		return errors.New("missing \"quality\" field")
+	}
+
+	i.Start = *interval.Start
+	i.End = *interval.End
+	i.Quality = *interval.Quality
+	return nil
 }
 
 const (

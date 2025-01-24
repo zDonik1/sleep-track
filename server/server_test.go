@@ -150,6 +150,13 @@ func (s *ServerSuite) TestCreateInterval() {
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
+		{
+			Name:           "MissingFields",
+			Body:           []byte(`{"quality":1}`),
+			SetupUser:      true,
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes(`missing \"start\" field`),
+		},
 	}
 
 	for _, d := range data {
