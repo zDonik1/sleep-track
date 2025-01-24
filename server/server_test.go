@@ -173,6 +173,45 @@ func (s *ServerSuite) TestCreateInterval() {
 	}
 }
 
+func (s *ServerSuite) TestJwtMiddleware() {
+	data := []struct {
+		Name           string
+		SetupUser      bool
+		ExpectedStatus int
+		ExpectedBody   string
+	}{
+		{
+			Name:           "UserDoesntExist",
+			SetupUser:      false,
+			ExpectedStatus: http.StatusUnauthorized,
+			ExpectedBody:   jsonMes("invalid or expired jwt"),
+		},
+	}
+
+	for _, d := range data {
+		s.Run(d.Name, func() {
+			if d.SetupUser {
+				s.setupDbWithUser()
+			}
+			s.ech.POST(
+				"/temp",
+				func(c echo.Context) error {
+					s.Fail("Should never reach handler")
+					return nil
+				},
+				s.serv.JwtMiddleware(),
+			)
+			req := httptest.NewRequest(http.MethodPost, "/temp", nil)
+			req.Header.Add("Authorization", "Bearer "+EXPECTED_JWT)
+
+			s.ech.ServeHTTP(s.rec, req)
+
+			s.Equal(d.ExpectedStatus, s.rec.Result().StatusCode)
+			s.Equal(d.ExpectedBody, s.rec.Body.String())
+		})
+	}
+}
+
 func TestServerSuite(t *testing.T) {
 	suite.Run(t, new(ServerSuite))
 }

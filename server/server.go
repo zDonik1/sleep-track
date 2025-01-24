@@ -172,6 +172,14 @@ func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
 			if !token.Valid {
 				return nil, &echojwt.TokenError{Token: token, Err: errors.New("invalid token")}
 			}
+			sub, err := token.Claims.GetSubject()
+			if err != nil {
+				return nil, &echojwt.TokenError{Token: token, Err: err}
+			}
+			_, ok := s.users[sub]
+			if !ok {
+				return nil, fmt.Errorf("user \"%s\" doesn't exist", sub)
+			}
 			return token, nil
 		},
 	})
