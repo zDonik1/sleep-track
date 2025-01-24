@@ -174,15 +174,29 @@ func (s *ServerSuite) TestCreateInterval() {
 }
 
 func (s *ServerSuite) TestJwtMiddleware() {
+	// JWT with sub = "testuser", exp = "2024-01-11T05:55:35.15Z"
+	const EXPIRED_JWT = "yJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+		"eyJleHAiOjE3MDQ5NTI1MzUsInN1YiI6InRlc3R1c2VyIn0." +
+		"2LMLB6-HWphjDkP9ervjFQYoX9_zfIp55GmGsKOz3U4"
+
 	data := []struct {
 		Name           string
 		SetupUser      bool
+		Jwt            string
 		ExpectedStatus int
 		ExpectedBody   string
 	}{
 		{
 			Name:           "UserDoesntExist",
 			SetupUser:      false,
+			Jwt:            EXPECTED_JWT,
+			ExpectedStatus: http.StatusUnauthorized,
+			ExpectedBody:   jsonMes("invalid or expired jwt"),
+		},
+		{
+			Name:           "ExpiredJWT",
+			SetupUser:      true,
+			Jwt:            EXPIRED_JWT,
 			ExpectedStatus: http.StatusUnauthorized,
 			ExpectedBody:   jsonMes("invalid or expired jwt"),
 		},
@@ -202,7 +216,7 @@ func (s *ServerSuite) TestJwtMiddleware() {
 				s.serv.JwtMiddleware(),
 			)
 			req := httptest.NewRequest(http.MethodPost, "/temp", nil)
-			req.Header.Add("Authorization", "Bearer "+EXPECTED_JWT)
+			req.Header.Add("Authorization", "Bearer "+d.Jwt)
 
 			s.ech.ServeHTTP(s.rec, req)
 
