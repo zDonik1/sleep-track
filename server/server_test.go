@@ -136,6 +136,20 @@ func (s *ServerSuite) TestCreateInterval() {
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes(`parsing time \"starttime\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"starttime\" as \"2006\"`),
 		},
+		{
+			Name:           "QualityBelowRange",
+			Body:           makeJsonBody(Interval{Start: start, End: end, Quality: 0}),
+			SetupUser:      true,
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes("quality out of 1-5 range"),
+		},
+		{
+			Name:           "QualityAboveRange",
+			Body:           makeJsonBody(Interval{Start: start, End: end, Quality: 10}),
+			SetupUser:      true,
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes("quality out of 1-5 range"),
+		},
 	}
 
 	for _, d := range data {
