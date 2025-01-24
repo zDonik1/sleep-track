@@ -129,6 +129,13 @@ func (s *ServerSuite) TestCreateInterval() {
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("interval end is the same or before start"),
 		},
+		{
+			Name:           "WrongTimeFormat",
+			Body:           []byte(`{"start":"starttime","end":"endtime","quality":1}`),
+			SetupUser:      true,
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes(`parsing time \"starttime\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"starttime\" as \"2006\"`),
+		},
 	}
 
 	for _, d := range data {
