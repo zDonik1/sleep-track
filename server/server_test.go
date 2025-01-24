@@ -111,56 +111,48 @@ func (s *ServerSuite) TestCreateInterval() {
 	data := []struct {
 		Name           string
 		Body           []byte
-		SetupUser      bool
 		ExpectedStatus int
 		ExpectedBody   string
 	}{
 		{
 			Name:           "ValidInterval",
 			Body:           makeJsonBody(Interval{Start: start, End: end, Quality: 1}),
-			SetupUser:      true,
 			ExpectedStatus: http.StatusCreated,
 			ExpectedBody:   "",
 		},
 		{
 			Name:           "EndBeforeStart",
 			Body:           makeJsonBody(Interval{Start: end, End: start, Quality: 1}),
-			SetupUser:      true,
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("interval end is the same or before start"),
 		},
 		{
 			Name:           "WrongTimeFormat",
 			Body:           []byte(`{"start":"starttime","end":"endtime","quality":1}`),
-			SetupUser:      true,
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes(`parsing time \"starttime\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"starttime\" as \"2006\"`),
 		},
 		{
 			Name:           "QualityBelowRange",
 			Body:           makeJsonBody(Interval{Start: start, End: end, Quality: 0}),
-			SetupUser:      true,
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
 		{
 			Name:           "QualityAboveRange",
 			Body:           makeJsonBody(Interval{Start: start, End: end, Quality: 10}),
-			SetupUser:      true,
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
 		{
 			Name:           "MissingFields",
 			Body:           []byte(`{"quality":1}`),
-			SetupUser:      true,
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes(`missing \"start\" field`),
 		},
 		{
 			Name:           "MissingBody",
 			Body:           []byte{},
-			SetupUser:      true,
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("EOF"),
 		},
@@ -168,9 +160,7 @@ func (s *ServerSuite) TestCreateInterval() {
 
 	for _, d := range data {
 		s.Run(d.Name, func() {
-			if d.SetupUser {
-				s.setupDbWithUser()
-			}
+			s.setupDbWithUser()
 			s.ech.POST("/intervals", s.serv.CreateInterval, s.serv.JwtMiddleware())
 			req := httptest.NewRequest(http.MethodPost, "/intervals", bytes.NewReader(d.Body))
 			req.Header.Add("Authorization", "Bearer "+EXPECTED_JWT)
