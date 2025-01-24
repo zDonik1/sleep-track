@@ -200,6 +200,20 @@ func (s *ServerSuite) TestJwtMiddleware() {
 			ExpectedStatus: http.StatusUnauthorized,
 			ExpectedBody:   jsonMes("invalid or expired jwt"),
 		},
+		{
+			Name:           "InvalidJWT",
+			SetupUser:      true,
+			Jwt:            "myinvalidjwt",
+			ExpectedStatus: http.StatusUnauthorized,
+			ExpectedBody:   jsonMes("invalid or expired jwt"),
+		},
+		{
+			Name:           "MissingJWT",
+			SetupUser:      true,
+			Jwt:            "",
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes("missing or malformed jwt"),
+		},
 	}
 
 	for _, d := range data {
