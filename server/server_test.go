@@ -157,6 +157,13 @@ func (s *ServerSuite) TestCreateInterval() {
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes(`missing \"start\" field`),
 		},
+		{
+			Name:           "MissingBody",
+			Body:           []byte{},
+			SetupUser:      true,
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes("EOF"),
+		},
 	}
 
 	for _, d := range data {
