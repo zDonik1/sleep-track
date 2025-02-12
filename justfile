@@ -3,6 +3,9 @@ set shell := ["bash", "-c"]
 help:
     @just --list --unsorted --justfile {{ justfile() }}
 
+# run tests in development mode
+devtest *ARGS:
+    gotest ./server -failfast -count=1 -v {{ ARGS }}
 
 # ---- NIX DEVELOP COMMANDS ---- #
 
