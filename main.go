@@ -55,6 +55,11 @@ func main() {
 
 	e := setupEcho(conf)
 	s := server.New()
+	if err = s.OpenDb(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	defer s.CloseDb()
 
 	e.POST("/login", s.LoginUser, middleware.BasicAuth(s.AuthenticateUser))
 

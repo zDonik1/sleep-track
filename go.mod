@@ -7,6 +7,7 @@ require (
 	github.com/labstack/echo-jwt/v4 v4.3.0
 	github.com/labstack/echo/v4 v4.13.0
 	github.com/labstack/gommon v0.4.2
+	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0

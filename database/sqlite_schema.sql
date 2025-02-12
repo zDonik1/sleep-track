@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS Users (
+    Name TEXT UNIQUE NOT NULL,
+    PassHash BLOB NOT NULL
+);

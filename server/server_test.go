@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	db "github.com/zDonik1/sleep-track/database"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -44,17 +45,34 @@ func (s *ServerSuite) SetupSubTest() {
 	s.setup()
 }
 
+func (s *ServerSuite) TearDownTest() {
+	s.teardown()
+}
+
+func (s *ServerSuite) TearDownSubTest() {
+	s.teardown()
+}
+
 func (s *ServerSuite) setup() {
 	s.ech = echo.New()
 	s.serv = New()
+	s.serv.dbSource = ":memory:"
 	s.serv.now = func() time.Time { return TEST_TIME }
 	s.rec = httptest.NewRecorder()
+
+	err := s.serv.OpenDb()
+	s.NoError(err)
+}
+
+func (s *ServerSuite) teardown() {
+	s.serv.CloseDb()
 }
 
 func (s *ServerSuite) setupDbWithUser() {
 	hash, err := bcrypt.GenerateFromPassword([]byte(TEST_PASS), COST)
 	s.NoError(err)
-	s.serv.users[TEST_USER] = User{Name: TEST_USER, PassHash: hash}
+	err = s.serv.db.AddUser(db.User{Name: TEST_USER, PassHash: hash})
+	s.NoError(err)
 }
 
 func (s *ServerSuite) TestLoginUser_UserDidntExist() {
@@ -98,7 +116,7 @@ func (s *ServerSuite) TestCreateInterval() {
 	start := time.Date(2024, time.January, 12, 21, 0, 0, 0, time.UTC)
 	end := start.Add(8 * time.Hour)
 
-	makeJsonBody := func(interval Interval) []byte {
+	makeJsonBody := func(interval db.Interval) []byte {
 		body, err := json.Marshal(map[string]any{
 			"start":   interval.Start,
 			"end":     interval.End,
@@ -116,13 +134,13 @@ func (s *ServerSuite) TestCreateInterval() {
 	}{
 		{
 			Name:           "ValidInterval",
-			Body:           makeJsonBody(Interval{Start: start, End: end, Quality: 1}),
+			Body:           makeJsonBody(db.Interval{Start: start, End: end, Quality: 1}),
 			ExpectedStatus: http.StatusCreated,
 			ExpectedBody:   "",
 		},
 		{
 			Name:           "EndBeforeStart",
-			Body:           makeJsonBody(Interval{Start: end, End: start, Quality: 1}),
+			Body:           makeJsonBody(db.Interval{Start: end, End: start, Quality: 1}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("interval end is the same or before start"),
 		},
@@ -134,13 +152,13 @@ func (s *ServerSuite) TestCreateInterval() {
 		},
 		{
 			Name:           "QualityBelowRange",
-			Body:           makeJsonBody(Interval{Start: start, End: end, Quality: 0}),
+			Body:           makeJsonBody(db.Interval{Start: start, End: end, Quality: 0}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
 		{
 			Name:           "QualityAboveRange",
-			Body:           makeJsonBody(Interval{Start: start, End: end, Quality: 10}),
+			Body:           makeJsonBody(db.Interval{Start: start, End: end, Quality: 10}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},

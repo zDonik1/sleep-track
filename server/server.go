@@ -10,46 +10,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
+	db "github.com/zDonik1/sleep-track/database"
 	"golang.org/x/crypto/bcrypt"
 )
-
-type User struct {
-	Name     string
-	PassHash []byte
-}
-
-type Interval struct {
-	Start   time.Time
-	End     time.Time
-	Quality int
-}
-
-func (i *Interval) UnmarshalJSON(b []byte) error {
-	var interval struct {
-		Start   *time.Time `json:"start"`
-		End     *time.Time `json:"end"`
-		Quality *int       `json:"quality"`
-	}
-	err := json.Unmarshal(b, &interval)
-	if err != nil {
-		return err
-	}
-
-	if interval.Start == nil {
-		return errors.New("missing \"start\" field")
-	}
-	if interval.End == nil {
-		return errors.New("missing \"end\" field")
-	}
-	if interval.Quality == nil {
-		return errors.New("missing \"quality\" field")
-	}
-
-	i.Start = *interval.Start
-	i.End = *interval.End
-	i.Quality = *interval.Quality
-	return nil
-}
 
 const (
 	COST = 8
@@ -61,37 +24,56 @@ var (
 )
 
 type Server struct {
-	users     map[string]User
-	intervals map[string][]Interval
+	db        db.Database
+	intervals map[string][]db.Interval
 
-	now func() time.Time
+	dbSource string
+	now      func() time.Time
 }
 
 func New() *Server {
 	return &Server{
-		users:     make(map[string]User),
-		intervals: make(map[string][]Interval),
+		db:        db.Database{},
+		intervals: make(map[string][]db.Interval),
+		dbSource:  "./sleep-track.db",
 		now:       func() time.Time { return time.Now() },
 	}
 }
 
+func (s *Server) OpenDb() error {
+	return s.db.Open(db.DriverSqlite, s.dbSource)
+}
+
+func (s *Server) CloseDb() {
+	s.db.Close()
+}
+
 func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, error) {
-	user, ok := s.users[username]
-	if !ok {
+	exists, err := s.db.UserExists(username)
+	if err != nil {
+		return false, err
+	}
+
+	if !exists {
 		hash, err := bcrypt.GenerateFromPassword([]byte(pass), COST)
 		if err != nil {
 			return false, echo.NewHTTPError(http.StatusUnauthorized, err)
 		}
-		s.users[username] = User{Name: username, PassHash: hash}
+		s.db.AddUser(db.User{Name: username, PassHash: hash})
 		c.Logger().Infof("New user signed up: %s", username)
 	} else {
+		user, err := s.db.GetUser(username)
+		if err != nil {
+			return false, err
+		}
+
 		if err := bcrypt.CompareHashAndPassword(user.PassHash, []byte(pass)); err != nil {
 			return false, echo.NewHTTPError(http.StatusUnauthorized, err)
 		}
 		c.Logger().Infof("Existing user signed in: %s", username)
 	}
 	c.Set("user", username)
-	c.Set("created", !ok)
+	c.Set("created", !exists)
 	return true, nil
 }
 
@@ -132,7 +114,7 @@ func (s *Server) CreateInterval(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, err)
 	}
 
-	interval := Interval{}
+	interval := db.Interval{}
 	err = json.NewDecoder(c.Request().Body).Decode(&interval)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
@@ -176,8 +158,12 @@ func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
 			if err != nil {
 				return nil, &echojwt.TokenError{Token: token, Err: err}
 			}
-			_, ok := s.users[sub]
-			if !ok {
+
+			exists, err := s.db.UserExists(sub)
+			if err != nil {
+				return nil, err
+			}
+			if !exists {
 				return nil, fmt.Errorf("user \"%s\" doesn't exist", sub)
 			}
 			return token, nil
