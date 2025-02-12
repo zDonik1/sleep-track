@@ -17,4 +17,4 @@ dev:
 # start server
 [group("nix develop")]
 run:
-    nix develop -c go run server.go
+    nix develop -c go run main.go
