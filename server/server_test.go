@@ -116,7 +116,7 @@ func (s *ServerSuite) TestCreateInterval() {
 	start := time.Date(2024, time.January, 12, 21, 0, 0, 0, time.UTC)
 	end := start.Add(8 * time.Hour)
 
-	makeJsonBody := func(interval db.Interval) string {
+	toJson := func(interval db.Interval) string {
 		body, err := json.Marshal(map[string]any{
 			"start":   interval.Start,
 			"end":     interval.End,
@@ -134,13 +134,13 @@ func (s *ServerSuite) TestCreateInterval() {
 	}{
 		{
 			Name:           "ValidInterval",
-			Body:           makeJsonBody(db.Interval{Start: start, End: end, Quality: 1}),
+			Body:           toJson(db.Interval{Start: start, End: end, Quality: 1}),
 			ExpectedStatus: http.StatusCreated,
 			ExpectedBody:   "",
 		},
 		{
 			Name:           "EndBeforeStart",
-			Body:           makeJsonBody(db.Interval{Start: end, End: start, Quality: 1}),
+			Body:           toJson(db.Interval{Start: end, End: start, Quality: 1}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("interval end is the same or before start"),
 		},
@@ -152,13 +152,13 @@ func (s *ServerSuite) TestCreateInterval() {
 		},
 		{
 			Name:           "QualityBelowRange",
-			Body:           makeJsonBody(db.Interval{Start: start, End: end, Quality: 0}),
+			Body:           toJson(db.Interval{Start: start, End: end, Quality: 0}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
 		{
 			Name:           "QualityAboveRange",
-			Body:           makeJsonBody(db.Interval{Start: start, End: end, Quality: 10}),
+			Body:           toJson(db.Interval{Start: start, End: end, Quality: 10}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
