@@ -114,3 +114,17 @@ func (d *Database) AddUser(u User) error {
 	}
 	return nil
 }
+
+func (d *Database) AddInterval(username string, i Interval) error {
+	_, err := d.db.Exec(
+		"INSERT INTO Intervals (Start, End, Quality, Username) VALUES (?,?,?,?)",
+		i.Start,
+		i.End,
+		i.Quality,
+		username,
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}

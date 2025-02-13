@@ -24,8 +24,7 @@ var (
 )
 
 type Server struct {
-	db        db.Database
-	intervals map[string][]db.Interval
+	db db.Database
 
 	dbSource string
 	now      func() time.Time
@@ -33,10 +32,9 @@ type Server struct {
 
 func New() *Server {
 	return &Server{
-		db:        db.Database{},
-		intervals: make(map[string][]db.Interval),
-		dbSource:  "./sleep-track.db",
-		now:       func() time.Time { return time.Now() },
+		db:       db.Database{},
+		dbSource: "./sleep-track.db",
+		now:      func() time.Time { return time.Now() },
 	}
 }
 
@@ -127,8 +125,11 @@ func (s *Server) CreateInterval(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "quality out of 1-5 range")
 	}
 
-	s.intervals[username] = append(s.intervals[username], interval)
-	c.Logger().Infof("interval %v added for user %s", s.intervals[username], username)
+	err = s.db.AddInterval(username, interval)
+	if err != nil {
+		return err
+	}
+	c.Logger().Infof("interval %v added for user %s", interval, username)
 	return c.NoContent(http.StatusCreated)
 }
 
