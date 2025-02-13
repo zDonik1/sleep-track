@@ -17,10 +17,37 @@ type User struct {
 }
 
 type Interval struct {
-	Id      int
+	Id      int64
 	Start   time.Time
 	End     time.Time
 	Quality int
+}
+
+type jsonIntervalNoId struct {
+	Start   *time.Time `json:"start"`
+	End     *time.Time `json:"end"`
+	Quality *int       `json:"quality"`
+}
+
+type jsonInterval struct {
+	Id *int64 `json:"id"`
+	jsonIntervalNoId
+}
+
+func (i Interval) MarshalJSON() ([]byte, error) {
+	interval := jsonInterval{
+		Id: &i.Id,
+		jsonIntervalNoId: jsonIntervalNoId{
+			Start:   &i.Start,
+			End:     &i.End,
+			Quality: &i.Quality,
+		},
+	}
+	json, err := json.Marshal(interval)
+	if err != nil {
+		return nil, err
+	}
+	return json, nil
 }
 
 func (i *Interval) UnmarshalJSON(b []byte) error {
@@ -115,8 +142,8 @@ func (d *Database) AddUser(u User) error {
 	return nil
 }
 
-func (d *Database) AddInterval(username string, i Interval) error {
-	_, err := d.db.Exec(
+func (d *Database) AddInterval(username string, i Interval) (Interval, error) {
+	r, err := d.db.Exec(
 		"INSERT INTO Intervals (Start, End, Quality, Username) VALUES (?,?,?,?)",
 		i.Start,
 		i.End,
@@ -124,7 +151,14 @@ func (d *Database) AddInterval(username string, i Interval) error {
 		username,
 	)
 	if err != nil {
-		return err
+		return Interval{}, err
 	}
-	return nil
+
+	id, err := r.LastInsertId()
+	if err != nil {
+		return Interval{}, err
+	}
+
+	i.Id = id
+	return i, err
 }

@@ -125,12 +125,12 @@ func (s *Server) CreateInterval(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "quality out of 1-5 range")
 	}
 
-	err = s.db.AddInterval(username, interval)
+	i, err := s.db.AddInterval(username, interval)
 	if err != nil {
 		return err
 	}
-	c.Logger().Infof("interval %v added for user %s", interval, username)
-	return c.NoContent(http.StatusCreated)
+	c.Logger().Infof("interval %v added for user %s", i, username)
+	return c.JSON(http.StatusCreated, i)
 }
 
 func (s *Server) JwtMiddleware() echo.MiddlewareFunc {

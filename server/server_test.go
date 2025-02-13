@@ -116,14 +116,38 @@ func (s *ServerSuite) TestCreateInterval() {
 	start := time.Date(2024, time.January, 12, 21, 0, 0, 0, time.UTC)
 	end := start.Add(8 * time.Hour)
 
+	type JsonInterval struct {
+		Start   time.Time `json:"start"`
+		End     time.Time `json:"end"`
+		Quality int       `json:"quality"`
+	}
+
+	type JsonIntervalWithId struct {
+		Id int64 `json:"id"`
+		JsonInterval
+	}
+
 	toJson := func(interval db.Interval) string {
-		body, err := json.Marshal(map[string]any{
-			"start":   interval.Start,
-			"end":     interval.End,
-			"quality": interval.Quality,
+		body, err := json.Marshal(JsonInterval{
+			Start:   interval.Start,
+			End:     interval.End,
+			Quality: interval.Quality,
 		})
 		s.Require().NoError(err)
 		return string(body)
+	}
+
+	toJsonWithId := func(interval db.Interval) string {
+		body, err := json.Marshal(JsonIntervalWithId{
+			Id: interval.Id,
+			JsonInterval: JsonInterval{
+				Start:   interval.Start,
+				End:     interval.End,
+				Quality: interval.Quality,
+			},
+		})
+		s.Require().NoError(err)
+		return string(body) + "\n"
 	}
 
 	data := []struct {
@@ -136,7 +160,7 @@ func (s *ServerSuite) TestCreateInterval() {
 			Name:           "ValidInterval",
 			Body:           toJson(db.Interval{Start: start, End: end, Quality: 1}),
 			ExpectedStatus: http.StatusCreated,
-			ExpectedBody:   "",
+			ExpectedBody:   toJsonWithId(db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
 		},
 		{
 			Name:           "EndBeforeStart",
