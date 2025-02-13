@@ -1,11 +1,11 @@
 package server
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -116,19 +116,19 @@ func (s *ServerSuite) TestCreateInterval() {
 	start := time.Date(2024, time.January, 12, 21, 0, 0, 0, time.UTC)
 	end := start.Add(8 * time.Hour)
 
-	makeJsonBody := func(interval db.Interval) []byte {
+	makeJsonBody := func(interval db.Interval) string {
 		body, err := json.Marshal(map[string]any{
 			"start":   interval.Start,
 			"end":     interval.End,
 			"quality": interval.Quality,
 		})
 		s.Require().NoError(err)
-		return body
+		return string(body)
 	}
 
 	data := []struct {
 		Name           string
-		Body           []byte
+		Body           string
 		ExpectedStatus int
 		ExpectedBody   string
 	}{
@@ -146,7 +146,7 @@ func (s *ServerSuite) TestCreateInterval() {
 		},
 		{
 			Name:           "WrongTimeFormat",
-			Body:           []byte(`{"start":"starttime","end":"endtime","quality":1}`),
+			Body:           `{"start":"starttime","end":"endtime","quality":1}`,
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes(`parsing time \"starttime\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"starttime\" as \"2006\"`),
 		},
@@ -164,13 +164,13 @@ func (s *ServerSuite) TestCreateInterval() {
 		},
 		{
 			Name:           "MissingFields",
-			Body:           []byte(`{"quality":1}`),
+			Body:           `{"quality":1}`,
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes(`missing \"start\" field`),
 		},
 		{
 			Name:           "MissingBody",
-			Body:           []byte{},
+			Body:           "",
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("EOF"),
 		},
@@ -180,7 +180,7 @@ func (s *ServerSuite) TestCreateInterval() {
 		s.Run(d.Name, func() {
 			s.setupDbWithUser()
 			s.ech.POST("/intervals", s.serv.CreateInterval, s.serv.JwtMiddleware())
-			req := httptest.NewRequest(http.MethodPost, "/intervals", bytes.NewReader(d.Body))
+			req := httptest.NewRequest(http.MethodPost, "/intervals", strings.NewReader(d.Body))
 			req.Header.Add("Authorization", "Bearer "+EXPECTED_JWT)
 
 			s.ech.ServeHTTP(s.rec, req)
