@@ -163,6 +163,12 @@ func (s *ServerSuite) TestCreateInterval() {
 			ExpectedBody:   toJsonWithId(db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
 		},
 		{
+			Name:           "IgnoreId",
+			Body:           toJsonWithId(db.Interval{Id: 10, Start: start, End: end, Quality: 1}),
+			ExpectedStatus: http.StatusCreated,
+			ExpectedBody:   toJsonWithId(db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
+		},
+		{
 			Name:           "EndBeforeStart",
 			Body:           toJson(db.Interval{Start: end, End: start, Quality: 1}),
 			ExpectedStatus: http.StatusBadRequest,
