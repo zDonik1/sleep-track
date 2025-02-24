@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	db "github.com/zDonik1/sleep-track/database"
+	ut "github.com/zDonik1/sleep-track/utils"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -21,6 +22,19 @@ type NoSsTime struct {
 func (t *NoSsTime) UnmarshalJSON(b []byte) error {
 	var tm time.Time
 	err := json.Unmarshal(b, &tm)
+	if err != nil {
+		return err
+	}
+	if tm.Nanosecond() != 0 {
+		return errors.New("subsecond values are not allowed")
+	}
+
+	t.Time = tm
+	return nil
+}
+
+func (t *NoSsTime) Parse(layout, value string) error {
+	tm, err := time.Parse(layout, value)
 	if err != nil {
 		return err
 	}
@@ -210,6 +224,36 @@ func (s *Server) CreateInterval(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusCreated, fromInterval(i))
+}
+
+func (s *Server) GetIntervals(c echo.Context) error {
+	token, _ := c.Get("user").(*jwt.Token)
+	username, _ := token.Claims.GetSubject()
+
+	qp := c.QueryParams()
+	if !qp.Has("start") {
+		return echo.NewHTTPError(http.StatusBadRequest, "missing 'start' query parameter")
+	}
+	if !qp.Has("end") {
+		return echo.NewHTTPError(http.StatusBadRequest, "missing 'end' query parameter")
+	}
+
+	var start, end NoSsTime
+	err := start.Parse(time.RFC3339, qp.Get("start"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err)
+	}
+	err = end.Parse(time.RFC3339, qp.Get("end"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	intervals, err := s.db.GetIntervals(username, start.Time, end.Time)
+	if err != nil {
+		return err
+	}
+	validatingIntervals := ut.Map(intervals, fromInterval)
+	return c.JSON(http.StatusOK, map[string]any{"intervals": validatingIntervals})
 }
 
 func (s *Server) JwtMiddleware() echo.MiddlewareFunc {

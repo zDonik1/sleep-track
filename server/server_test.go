@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	db "github.com/zDonik1/sleep-track/database"
+	ut "github.com/zDonik1/sleep-track/utils"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -27,7 +28,10 @@ const (
 		"W4s_64lN7Ob8NIj2Yf1sVfO5PiPyZbPI-UE0s6MLi2c"
 )
 
-var TEST_TIME = time.Date(2024, time.January, 12, 5, 55, 35, 150, time.UTC)
+var (
+	TEST_TIME = time.Date(2024, time.January, 12, 5, 55, 35, 150, time.UTC)
+	START     = time.Date(2024, time.January, 12, 21, 0, 0, 0, time.UTC)
+)
 
 type ServerSuite struct {
 	suite.Suite
@@ -119,7 +123,7 @@ func (s *ServerSuite) TestLoginUser_WrongPassword() {
 }
 
 func (s *ServerSuite) TestCreateInterval() {
-	start := time.Date(2024, time.January, 12, 21, 0, 0, 0, time.UTC)
+	start := START
 	end := start.Add(8 * time.Hour)
 
 	data := []struct {
@@ -196,6 +200,169 @@ func (s *ServerSuite) TestCreateInterval() {
 			s.Equal(d.ExpectedStatus, s.rec.Result().StatusCode)
 			s.Equal(d.ExpectedBody, s.rec.Body.String())
 		})
+	}
+}
+
+func (s *ServerSuite) TestGetIntervals() {
+	toJson := func(intervals []db.Interval) string {
+		res, err := json.Marshal(map[string]any{"intervals": ut.Map(intervals, fromInterval)})
+		s.NoError(err)
+		return string(res) + "\n"
+	}
+
+	makeQuery := func(start, end string) string {
+		return fmt.Sprintf("?start=%s&end=%s", start, end)
+	}
+
+	makeValidQuery := func(start, end time.Time) string {
+		return makeQuery(start.Format(time.RFC3339), end.Format(time.RFC3339))
+	}
+
+	addId := func(interval db.Interval, id int64) db.Interval {
+		interval.Id = id
+		return interval
+	}
+
+	intervalOne := db.Interval{Start: START, End: START.Add(4 * time.Hour), Quality: 1}
+	intervalOneWithId := addId(intervalOne, 1)
+	intervalTwo := db.Interval{Start: START.Add(5 * time.Hour), End: START.Add(9 * time.Hour), Quality: 1}
+	intervalTwoWithId := addId(intervalTwo, 2)
+
+	data := []struct {
+		Name           string
+		IntervalsInDb  []db.Interval
+		Query          string
+		ExpectedStatus int
+		ExpectedBody   string
+	}{
+		{
+			Name:           "FullOverlap",
+			IntervalsInDb:  []db.Interval{intervalOne},
+			Query:          makeValidQuery(intervalOne.Start, intervalOne.End),
+			ExpectedStatus: http.StatusOK,
+			ExpectedBody:   toJson([]db.Interval{intervalOneWithId}),
+		},
+		{
+			Name:          "PartiaOverlap",
+			IntervalsInDb: []db.Interval{intervalOne},
+			Query: makeValidQuery(
+				intervalOne.Start.Add(2*time.Hour),
+				intervalOne.End.Add(2*time.Hour),
+			),
+			ExpectedStatus: http.StatusOK,
+			ExpectedBody:   toJson([]db.Interval{intervalOneWithId}),
+		},
+		{
+			Name:           "EdgeOverlap",
+			IntervalsInDb:  []db.Interval{intervalOne},
+			Query:          makeValidQuery(intervalOne.End, intervalOne.End.Add(4*time.Hour)),
+			ExpectedStatus: http.StatusOK,
+			ExpectedBody:   toJson([]db.Interval{intervalOneWithId}),
+		},
+		{
+			Name:          "NoOverlap",
+			IntervalsInDb: []db.Interval{intervalOne},
+			Query: makeValidQuery(
+				intervalOne.End.Add(1*time.Hour),
+				intervalOne.End.Add(5*time.Hour),
+			),
+			ExpectedStatus: http.StatusOK,
+			ExpectedBody:   toJson([]db.Interval{}),
+		},
+		{
+			Name:          "TwoIntervalOverlap",
+			IntervalsInDb: []db.Interval{intervalOne, intervalTwo},
+			Query: makeValidQuery(
+				intervalOne.Start.Add(2*time.Hour),
+				intervalTwo.Start.Add(2*time.Hour),
+			),
+			ExpectedStatus: http.StatusOK,
+			ExpectedBody:   toJson([]db.Interval{intervalOneWithId, intervalTwoWithId}),
+		},
+		{
+			Name:          "SortedByStartTime",
+			IntervalsInDb: []db.Interval{intervalTwo, intervalOne},
+			Query: makeValidQuery(
+				intervalOne.Start.Add(2*time.Hour),
+				intervalTwo.Start.Add(2*time.Hour),
+			),
+			ExpectedStatus: http.StatusOK,
+			ExpectedBody:   toJson([]db.Interval{addId(intervalOne, 2), addId(intervalTwo, 1)}),
+		},
+		{
+			Name:           "NoIntervals",
+			IntervalsInDb:  []db.Interval{},
+			Query:          makeValidQuery(intervalOne.Start, intervalOne.End),
+			ExpectedStatus: http.StatusOK,
+			ExpectedBody:   toJson([]db.Interval{}),
+		},
+		{
+			Name:           "MissingQuery",
+			IntervalsInDb:  []db.Interval{intervalOne},
+			Query:          "",
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes("missing 'start' query parameter"),
+		},
+		{
+			Name:           "MissingStartQueryParam",
+			IntervalsInDb:  []db.Interval{intervalOne},
+			Query:          "?end=" + intervalOne.End.Format(time.RFC3339),
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes("missing 'start' query parameter"),
+		},
+		{
+			Name:           "MissingEndQueryParam",
+			IntervalsInDb:  []db.Interval{intervalOne},
+			Query:          "?start=" + intervalOne.Start.Format(time.RFC3339),
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes("missing 'end' query parameter"),
+		},
+		{
+			Name:           "WrongStartFormat",
+			IntervalsInDb:  []db.Interval{intervalOne},
+			Query:          makeQuery("wrongformat", intervalOne.End.Format(time.RFC3339)),
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody: jsonMes(
+				`parsing time \"wrongformat\" as \"2006-01-02T15:04:05Z07:00\": ` +
+					`cannot parse \"wrongformat\" as \"2006\"`,
+			),
+		},
+		{
+			Name:           "WrongEndFormat",
+			IntervalsInDb:  []db.Interval{intervalOne},
+			Query:          makeQuery(intervalOne.Start.Format(time.RFC3339), "wrongformat"),
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody: jsonMes(
+				`parsing time \"wrongformat\" as \"2006-01-02T15:04:05Z07:00\": ` +
+					`cannot parse \"wrongformat\" as \"2006\"`,
+			),
+		},
+		{
+			Name:           "DisallowSubseconds",
+			IntervalsInDb:  []db.Interval{intervalOne},
+			Query:          makeQuery("2006-01-02T15:04:05.025Z", "2006-01-02T16:04:05.025Z"),
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes("subsecond values are not allowed"),
+		},
+	}
+
+	for _, d := range data {
+		s.Run(d.Name, func() {
+			s.setupDbWithUser()
+			for _, i := range d.IntervalsInDb {
+				s.serv.db.AddInterval(TEST_USER, i)
+			}
+
+			s.ech.GET("/intervals", s.serv.GetIntervals, s.serv.JwtMiddleware())
+			req := httptest.NewRequest(http.MethodGet, "/intervals"+d.Query, nil)
+			req.Header.Add("Authorization", "Bearer "+EXPECTED_JWT)
+
+			s.ech.ServeHTTP(s.rec, req)
+
+			s.Equal(d.ExpectedStatus, s.rec.Result().StatusCode)
+			s.Equal(d.ExpectedBody, s.rec.Body.String())
+		})
+
 	}
 }
 

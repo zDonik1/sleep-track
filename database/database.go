@@ -78,6 +78,34 @@ func (d *Database) GetUser(username string) (*User, error) {
 	return &User{Name: name, PassHash: hash}, nil
 }
 
+func (d *Database) GetIntervals(username string, start, end time.Time) ([]Interval, error) {
+	rows, err := d.db.Query(
+		`SELECT Id, Start, End, Quality FROM Intervals `+
+			`WHERE Username = ? AND (Start <= ? AND End >= ?)`+
+			`ORDER BY Start`,
+		username,
+		end,
+		start,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]Interval, 0)
+	for rows.Next() {
+		var i Interval
+		err := rows.Scan(&i.Id, &i.Start, &i.End, &i.Quality)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, i)
+	}
+	if rows.Err() != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (d *Database) AddUser(u User) error {
 	_, err := d.db.Exec("INSERT INTO Users VALUES (?,?)", u.Name, u.PassHash)
 	if err != nil {
