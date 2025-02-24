@@ -64,8 +64,14 @@ func (i *Interval) UnmarshalJSON(b []byte) error {
 	if interval.Start == nil {
 		return errors.New("missing \"start\" field")
 	}
+	if interval.Start.Nanosecond() != 0 {
+		return errors.New("subsecond values are not allowed")
+	}
 	if interval.End == nil {
 		return errors.New("missing \"end\" field")
+	}
+	if interval.End.Nanosecond() != 0 {
+		return errors.New("subsecond values are not allowed")
 	}
 	if interval.Quality == nil {
 		return errors.New("missing \"quality\" field")
