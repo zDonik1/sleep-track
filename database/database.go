@@ -11,6 +11,24 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+type NoSsTime struct {
+	time.Time
+}
+
+func (t *NoSsTime) UnmarshalJSON(b []byte) error {
+	var tm time.Time
+	err := json.Unmarshal(b, &tm)
+	if err != nil {
+		return err
+	}
+	if tm.Nanosecond() != 0 {
+		return errors.New("subsecond values are not allowed")
+	}
+
+	t.Time = tm
+	return nil
+}
+
 type User struct {
 	Name     string
 	PassHash []byte
@@ -24,9 +42,9 @@ type Interval struct {
 }
 
 type jsonIntervalNoId struct {
-	Start   *time.Time `json:"start"`
-	End     *time.Time `json:"end"`
-	Quality *int       `json:"quality"`
+	Start   *NoSsTime `json:"start"`
+	End     *NoSsTime `json:"end"`
+	Quality *int      `json:"quality"`
 }
 
 type jsonInterval struct {
@@ -38,8 +56,8 @@ func (i Interval) MarshalJSON() ([]byte, error) {
 	interval := jsonInterval{
 		Id: &i.Id,
 		jsonIntervalNoId: jsonIntervalNoId{
-			Start:   &i.Start,
-			End:     &i.End,
+			Start:   &NoSsTime{Time: i.Start},
+			End:     &NoSsTime{Time: i.End},
 			Quality: &i.Quality,
 		},
 	}
@@ -51,35 +69,25 @@ func (i Interval) MarshalJSON() ([]byte, error) {
 }
 
 func (i *Interval) UnmarshalJSON(b []byte) error {
-	var interval struct {
-		Start   *time.Time `json:"start"`
-		End     *time.Time `json:"end"`
-		Quality *int       `json:"quality"`
-	}
-	err := json.Unmarshal(b, &interval)
+	var intr jsonIntervalNoId
+	err := json.Unmarshal(b, &intr)
 	if err != nil {
 		return err
 	}
 
-	if interval.Start == nil {
+	if intr.Start == nil {
 		return errors.New("missing \"start\" field")
 	}
-	if interval.Start.Nanosecond() != 0 {
-		return errors.New("subsecond values are not allowed")
-	}
-	if interval.End == nil {
+	if intr.End == nil {
 		return errors.New("missing \"end\" field")
 	}
-	if interval.End.Nanosecond() != 0 {
-		return errors.New("subsecond values are not allowed")
-	}
-	if interval.Quality == nil {
+	if intr.Quality == nil {
 		return errors.New("missing \"quality\" field")
 	}
 
-	i.Start = *interval.Start
-	i.End = *interval.End
-	i.Quality = *interval.Quality
+	i.Start = intr.Start.Time
+	i.End = intr.End.Time
+	i.Quality = *intr.Quality
 	return nil
 }
 
