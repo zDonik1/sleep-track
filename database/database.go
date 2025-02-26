@@ -3,31 +3,11 @@ package database
 import (
 	"database/sql"
 	_ "embed"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
-
-type NoSsTime struct {
-	time.Time
-}
-
-func (t *NoSsTime) UnmarshalJSON(b []byte) error {
-	var tm time.Time
-	err := json.Unmarshal(b, &tm)
-	if err != nil {
-		return err
-	}
-	if tm.Nanosecond() != 0 {
-		return errors.New("subsecond values are not allowed")
-	}
-
-	t.Time = tm
-	return nil
-}
 
 type User struct {
 	Name     string
@@ -39,56 +19,6 @@ type Interval struct {
 	Start   time.Time
 	End     time.Time
 	Quality int
-}
-
-type jsonIntervalNoId struct {
-	Start   *NoSsTime `json:"start"`
-	End     *NoSsTime `json:"end"`
-	Quality *int      `json:"quality"`
-}
-
-type jsonInterval struct {
-	Id *int64 `json:"id"`
-	jsonIntervalNoId
-}
-
-func (i Interval) MarshalJSON() ([]byte, error) {
-	interval := jsonInterval{
-		Id: &i.Id,
-		jsonIntervalNoId: jsonIntervalNoId{
-			Start:   &NoSsTime{Time: i.Start},
-			End:     &NoSsTime{Time: i.End},
-			Quality: &i.Quality,
-		},
-	}
-	json, err := json.Marshal(interval)
-	if err != nil {
-		return nil, err
-	}
-	return json, nil
-}
-
-func (i *Interval) UnmarshalJSON(b []byte) error {
-	var intr jsonIntervalNoId
-	err := json.Unmarshal(b, &intr)
-	if err != nil {
-		return err
-	}
-
-	if intr.Start == nil {
-		return errors.New("missing \"start\" field")
-	}
-	if intr.End == nil {
-		return errors.New("missing \"end\" field")
-	}
-	if intr.Quality == nil {
-		return errors.New("missing \"quality\" field")
-	}
-
-	i.Start = intr.Start.Time
-	i.End = intr.End.Time
-	i.Quality = *intr.Quality
-	return nil
 }
 
 type Database struct {

@@ -76,32 +76,7 @@ func (s *ServerSuite) setupDbWithUser() {
 }
 
 func (s *ServerSuite) intrToJson(interval db.Interval) string {
-	type JsonInterval struct {
-		Start   time.Time `json:"start"`
-		End     time.Time `json:"end"`
-		Quality int       `json:"quality"`
-	}
-
-	type JsonIntervalWithId struct {
-		Id int64 `json:"id"`
-		JsonInterval
-	}
-
-	jsonIntr := JsonInterval{
-		Start:   interval.Start,
-		End:     interval.End,
-		Quality: interval.Quality,
-	}
-	var res []byte
-	var err error
-	if interval.Id == 0 {
-		res, err = json.Marshal(jsonIntr)
-	} else {
-		res, err = json.Marshal(JsonIntervalWithId{
-			Id:           interval.Id,
-			JsonInterval: jsonIntr,
-		})
-	}
+	res, err := json.Marshal(fromInterval(interval))
 	s.Require().NoError(err)
 	return string(res) + "\n"
 }

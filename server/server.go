@@ -14,6 +14,86 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type NoSsTime struct {
+	time.Time
+}
+
+func (t *NoSsTime) UnmarshalJSON(b []byte) error {
+	var tm time.Time
+	err := json.Unmarshal(b, &tm)
+	if err != nil {
+		return err
+	}
+	if tm.Nanosecond() != 0 {
+		return errors.New("subsecond values are not allowed")
+	}
+
+	t.Time = tm
+	return nil
+}
+
+type validatingInterval struct {
+	Id      int64
+	Start   NoSsTime
+	End     NoSsTime
+	Quality int
+}
+
+type jsonIntervalNoId struct {
+	Start   *NoSsTime `json:"start"`
+	End     *NoSsTime `json:"end"`
+	Quality *int      `json:"quality"`
+}
+
+type jsonInterval struct {
+	Id *int64 `json:"id"`
+	jsonIntervalNoId
+}
+
+func (i validatingInterval) MarshalJSON() ([]byte, error) {
+	intrNoId := jsonIntervalNoId{Start: &i.Start, End: &i.End, Quality: &i.Quality}
+	if i.Id == 0 {
+		return json.Marshal(intrNoId)
+	}
+	return json.Marshal(jsonInterval{Id: &i.Id, jsonIntervalNoId: intrNoId})
+}
+
+func (i *validatingInterval) UnmarshalJSON(b []byte) error {
+	var jsonIntr jsonInterval
+	err := json.Unmarshal(b, &jsonIntr)
+	if err != nil {
+		return err
+	}
+
+	if jsonIntr.Start == nil {
+		return errors.New("missing \"start\" field")
+	}
+	if jsonIntr.End == nil {
+		return errors.New("missing \"end\" field")
+	}
+	if jsonIntr.Quality == nil {
+		return errors.New("missing \"quality\" field")
+	}
+
+	i.Start = *jsonIntr.Start
+	i.End = *jsonIntr.End
+	i.Quality = *jsonIntr.Quality
+	return nil
+}
+
+func toInterval(i validatingInterval) db.Interval {
+	return db.Interval{Id: i.Id, Start: i.Start.Time, End: i.End.Time, Quality: i.Quality}
+}
+
+func fromInterval(it db.Interval) validatingInterval {
+	var i validatingInterval
+	i.Id = it.Id
+	i.Start.Time = it.Start
+	i.End.Time = it.End
+	i.Quality = it.Quality
+	return i
+}
+
 const (
 	COST = 8
 )
@@ -112,25 +192,24 @@ func (s *Server) CreateInterval(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, err)
 	}
 
-	interval := db.Interval{}
+	interval := validatingInterval{}
 	err = json.NewDecoder(c.Request().Body).Decode(&interval)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	if interval.Start.Compare(interval.End) != -1 {
+	if interval.Start.Compare(interval.End.Time) != -1 {
 		return echo.NewHTTPError(http.StatusBadRequest, "interval end is the same or before start")
 	}
 	if interval.Quality < 1 || interval.Quality > 5 {
 		return echo.NewHTTPError(http.StatusBadRequest, "quality out of 1-5 range")
 	}
 
-	i, err := s.db.AddInterval(username, interval)
+	i, err := s.db.AddInterval(username, toInterval(interval))
 	if err != nil {
 		return err
 	}
-	c.Logger().Infof("interval %v added for user %s", i, username)
-	return c.JSON(http.StatusCreated, i)
+	return c.JSON(http.StatusCreated, fromInterval(i))
 }
 
 func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
