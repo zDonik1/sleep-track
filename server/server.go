@@ -141,6 +141,19 @@ func (s *Server) CloseDb() {
 }
 
 func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, error) {
+	if username == "" {
+		return false, echo.NewHTTPError(
+			http.StatusUnauthorized,
+			"invalid username: the username is empty",
+		)
+	}
+	if pass == "" {
+		return false, echo.NewHTTPError(
+			http.StatusUnauthorized,
+			"invalid password: the password is empty",
+		)
+	}
+
 	exists, err := s.db.UserExists(username)
 	if err != nil {
 		return false, err

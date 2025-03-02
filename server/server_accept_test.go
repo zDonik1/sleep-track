@@ -85,10 +85,13 @@ func (s *ServerSuite) intrToJson(interval db.Interval) string {
 	return string(res) + "\n"
 }
 
+// TestLoginUser also tests AuthenticateUser middleware since it is only used in this endpoint
 func (s *ServerSuite) TestLoginUser() {
 	data := []struct {
 		Name           string
 		SetupUser      bool
+		SetupBasicAuth bool
+		Username       string
 		Password       string
 		ExpectedStatus int
 		ExpectedBody   string
@@ -96,6 +99,8 @@ func (s *ServerSuite) TestLoginUser() {
 		{
 			Name:           "UserDidntExist",
 			SetupUser:      false,
+			SetupBasicAuth: true,
+			Username:       TEST_USER,
 			Password:       TEST_PASS,
 			ExpectedStatus: http.StatusCreated,
 			ExpectedBody:   EXPECTED_JWT,
@@ -103,18 +108,47 @@ func (s *ServerSuite) TestLoginUser() {
 		{
 			Name:           "UserExisted",
 			SetupUser:      true,
+			SetupBasicAuth: true,
+			Username:       TEST_USER,
 			Password:       TEST_PASS,
 			ExpectedStatus: http.StatusOK,
 			ExpectedBody:   EXPECTED_JWT,
 		},
 		{
+			Name:           "InvalidUsername",
+			SetupUser:      false,
+			SetupBasicAuth: true,
+			Username:       "",
+			Password:       TEST_PASS,
+			ExpectedStatus: http.StatusUnauthorized,
+			ExpectedBody:   jsonMes("invalid username: the username is empty"),
+		},
+		{
+			Name:           "InvalidPassword",
+			SetupUser:      false,
+			SetupBasicAuth: true,
+			Username:       TEST_USER,
+			Password:       "",
+			ExpectedStatus: http.StatusUnauthorized,
+			ExpectedBody:   jsonMes("invalid password: the password is empty"),
+		},
+		{
 			Name:           "WrongPassword",
 			SetupUser:      true,
+			SetupBasicAuth: true,
+			Username:       TEST_USER,
 			Password:       ANOTHER_PASS,
 			ExpectedStatus: http.StatusUnauthorized,
 			ExpectedBody: jsonMes(
 				"crypto/bcrypt: hashedPassword is not the hash of the given password",
 			),
+		},
+		{
+			Name:           "NoBasicAuth",
+			SetupUser:      false,
+			SetupBasicAuth: false,
+			ExpectedStatus: http.StatusUnauthorized,
+			ExpectedBody:   jsonMes("Unauthorized"),
 		},
 	}
 
@@ -125,7 +159,9 @@ func (s *ServerSuite) TestLoginUser() {
 			}
 			s.ech.POST("/login", s.serv.LoginUser, middleware.BasicAuth(s.serv.AuthenticateUser))
 			req := httptest.NewRequest(http.MethodPost, "/login", nil)
-			req.SetBasicAuth(TEST_USER, d.Password)
+			if d.SetupBasicAuth {
+				req.SetBasicAuth(d.Username, d.Password)
+			}
 
 			s.ech.ServeHTTP(s.rec, req)
 
@@ -421,6 +457,8 @@ func (s *ServerSuite) TestJwtMiddleware() {
 			ExpectedBody:   jsonMes("missing or malformed jwt"),
 		},
 	}
+	// The case with empty string subject and missing subject should never happen since the server
+	// never creates JWT with empty subjec. Verified by TestLoginUser tests.
 
 	for _, d := range data {
 		s.Run(d.Name, func() {
