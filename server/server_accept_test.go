@@ -85,41 +85,54 @@ func (s *ServerSuite) intrToJson(interval db.Interval) string {
 	return string(res) + "\n"
 }
 
-func (s *ServerSuite) TestLoginUser_UserDidntExist() {
-	s.ech.POST("/login", s.serv.LoginUser, middleware.BasicAuth(s.serv.AuthenticateUser))
-	req := httptest.NewRequest(http.MethodPost, "/login", nil)
-	req.SetBasicAuth(TEST_USER, TEST_PASS)
+func (s *ServerSuite) TestLoginUser() {
+	data := []struct {
+		Name           string
+		SetupUser      bool
+		Password       string
+		ExpectedStatus int
+		ExpectedBody   string
+	}{
+		{
+			Name:           "UserDidntExist",
+			SetupUser:      false,
+			Password:       TEST_PASS,
+			ExpectedStatus: http.StatusCreated,
+			ExpectedBody:   EXPECTED_JWT,
+		},
+		{
+			Name:           "UserExisted",
+			SetupUser:      true,
+			Password:       TEST_PASS,
+			ExpectedStatus: http.StatusOK,
+			ExpectedBody:   EXPECTED_JWT,
+		},
+		{
+			Name:           "WrongPassword",
+			SetupUser:      true,
+			Password:       ANOTHER_PASS,
+			ExpectedStatus: http.StatusUnauthorized,
+			ExpectedBody: jsonMes(
+				"crypto/bcrypt: hashedPassword is not the hash of the given password",
+			),
+		},
+	}
 
-	s.ech.ServeHTTP(s.rec, req)
+	for _, d := range data {
+		s.Run(d.Name, func() {
+			if d.SetupUser {
+				s.setupDbWithUser()
+			}
+			s.ech.POST("/login", s.serv.LoginUser, middleware.BasicAuth(s.serv.AuthenticateUser))
+			req := httptest.NewRequest(http.MethodPost, "/login", nil)
+			req.SetBasicAuth(TEST_USER, d.Password)
 
-	s.Equal(http.StatusCreated, s.rec.Code)
-	s.Equal(EXPECTED_JWT, s.rec.Body.String())
-}
+			s.ech.ServeHTTP(s.rec, req)
 
-func (s *ServerSuite) TestLoginUser_UserExisted() {
-	s.setupDbWithUser()
-	s.ech.POST("/login", s.serv.LoginUser, middleware.BasicAuth(s.serv.AuthenticateUser))
-	req := httptest.NewRequest(http.MethodPost, "/login", nil)
-	req.SetBasicAuth(TEST_USER, TEST_PASS)
-
-	s.ech.ServeHTTP(s.rec, req)
-
-	s.Equal(http.StatusOK, s.rec.Code)
-	s.Equal(EXPECTED_JWT, s.rec.Body.String())
-}
-
-func (s *ServerSuite) TestLoginUser_WrongPassword() {
-	s.setupDbWithUser()
-	s.ech.POST("/login", s.serv.LoginUser, middleware.BasicAuth(s.serv.AuthenticateUser))
-	req := httptest.NewRequest(http.MethodPost, "/login", nil)
-	req.SetBasicAuth(TEST_USER, ANOTHER_PASS)
-
-	s.ech.ServeHTTP(s.rec, req)
-
-	s.Equal(http.StatusUnauthorized, s.rec.Code)
-	s.Equal(
-		jsonMes("crypto/bcrypt: hashedPassword is not the hash of the given password"),
-		s.rec.Body.String())
+			s.Equal(d.ExpectedStatus, s.rec.Code)
+			s.Equal(d.ExpectedBody, s.rec.Body.String())
+		})
+	}
 }
 
 func (s *ServerSuite) TestCreateInterval() {
