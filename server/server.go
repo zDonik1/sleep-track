@@ -126,7 +126,7 @@ type Server struct {
 
 func New() *Server {
 	return &Server{
-		db:       db.Database{},
+		db:       &db.SqlDatabase{},
 		dbSource: "./sleep-track.db",
 		now:      func() time.Time { return time.Now() },
 	}
@@ -209,18 +209,13 @@ func (s *Server) LoginUser(c echo.Context) error {
 }
 
 func (s *Server) CreateInterval(c echo.Context) error {
-	token, ok := c.Get("user").(*jwt.Token)
+	username, ok := c.Get("username").(string)
 	if !ok {
-		return errors.New("could not cast context field 'user' to *jwt.Token")
-	}
-
-	username, err := token.Claims.GetSubject()
-	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, err)
+		return errors.New("context field 'username' is not set or isn't a of type string")
 	}
 
 	interval := validatingInterval{}
-	err = json.NewDecoder(c.Request().Body).Decode(&interval)
+	err := json.NewDecoder(c.Request().Body).Decode(&interval)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
@@ -240,8 +235,10 @@ func (s *Server) CreateInterval(c echo.Context) error {
 }
 
 func (s *Server) GetIntervals(c echo.Context) error {
-	token, _ := c.Get("user").(*jwt.Token)
-	username, _ := token.Claims.GetSubject()
+	username, ok := c.Get("username").(string)
+	if !ok {
+		return errors.New("context field 'username' is not set or isn't a of type string")
+	}
 
 	qp := c.QueryParams()
 	if !qp.Has("start") {
@@ -303,6 +300,7 @@ func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
 			if !exists {
 				return nil, fmt.Errorf("user \"%s\" doesn't exist", sub)
 			}
+			c.Set("username", sub)
 			return token, nil
 		},
 	})
