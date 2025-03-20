@@ -21,7 +21,17 @@ type Interval struct {
 	Quality int
 }
 
-type Database struct {
+type Database interface {
+	Open(driver Driver, source string) error
+	Close()
+	UserExists(username string) (bool, error)
+	GetUser(username string) (*User, error)
+	GetIntervals(username string, start, end time.Time) ([]Interval, error)
+	AddUser(u User) error
+	AddInterval(username string, i Interval) (Interval, error)
+}
+
+type SqlDatabase struct {
 	db *sql.DB
 }
 
@@ -34,7 +44,7 @@ const (
 //go:embed sqlite_schema.sql
 var createSchema string
 
-func (d *Database) Open(driver Driver, source string) error {
+func (d *SqlDatabase) Open(driver Driver, source string) error {
 	db, err := sql.Open("sqlite3", source)
 	if err != nil {
 		return err
@@ -48,11 +58,11 @@ func (d *Database) Open(driver Driver, source string) error {
 	return nil
 }
 
-func (d *Database) Close() {
+func (d *SqlDatabase) Close() {
 	d.db.Close()
 }
 
-func (d *Database) UserExists(username string) (bool, error) {
+func (d *SqlDatabase) UserExists(username string) (bool, error) {
 	var name string
 	statement := fmt.Sprintf(`SELECT Name FROM Users WHERE Name = '%s'`, username)
 	err := d.db.QueryRow(statement).Scan(&name)
@@ -66,7 +76,7 @@ func (d *Database) UserExists(username string) (bool, error) {
 	return true, nil
 }
 
-func (d *Database) GetUser(username string) (*User, error) {
+func (d *SqlDatabase) GetUser(username string) (*User, error) {
 	statement := fmt.Sprintf(`SELECT Name, PassHash FROM Users WHERE Name = '%s'`, username)
 	var name string
 	var hash []byte
@@ -78,7 +88,7 @@ func (d *Database) GetUser(username string) (*User, error) {
 	return &User{Name: name, PassHash: hash}, nil
 }
 
-func (d *Database) GetIntervals(username string, start, end time.Time) ([]Interval, error) {
+func (d *SqlDatabase) GetIntervals(username string, start, end time.Time) ([]Interval, error) {
 	rows, err := d.db.Query(
 		`SELECT Id, Start, End, Quality FROM Intervals `+
 			`WHERE Username = ? AND (Start <= ? AND End >= ?)`+
@@ -106,7 +116,7 @@ func (d *Database) GetIntervals(username string, start, end time.Time) ([]Interv
 	return result, nil
 }
 
-func (d *Database) AddUser(u User) error {
+func (d *SqlDatabase) AddUser(u User) error {
 	_, err := d.db.Exec("INSERT INTO Users VALUES (?,?)", u.Name, u.PassHash)
 	if err != nil {
 		return err
@@ -114,7 +124,7 @@ func (d *Database) AddUser(u User) error {
 	return nil
 }
 
-func (d *Database) AddInterval(username string, i Interval) (Interval, error) {
+func (d *SqlDatabase) AddInterval(username string, i Interval) (Interval, error) {
 	r, err := d.db.Exec(
 		"INSERT INTO Intervals (Start, End, Quality, Username) VALUES (?,?,?,?)",
 		i.Start,
