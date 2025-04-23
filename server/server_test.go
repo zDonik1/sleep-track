@@ -71,7 +71,7 @@ func TestMissingContextKeysInLoginUser(t *testing.T) {
 			err := serv.LoginUser(ctx)
 
 			assert.ErrorContains(t, err, fmt.Sprintf(
-				"context field '%s' is not set or isn't a of type %s",
+				"context field '%s' is not set or isn't of type %s",
 				d.Key,
 				d.Type,
 			))
@@ -100,7 +100,7 @@ func TestMissingUsernameContextKey(t *testing.T) {
 			assert.ErrorContains(
 				t,
 				err,
-				"context field 'username' is not set or isn't a of type string",
+				"context field 'username' is not set or isn't of type string",
 			)
 		})
 	}

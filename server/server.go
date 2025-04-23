@@ -187,11 +187,11 @@ func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, 
 func (s *Server) LoginUser(c echo.Context) error {
 	username, ok := c.Get("user").(string)
 	if !ok {
-		return errors.New("context field 'user' is not set or isn't a of type string")
+		return errors.New("context field 'user' is not set or isn't of type string")
 	}
 	created, ok := c.Get("created").(bool)
 	if !ok {
-		return errors.New("context field 'created' is not set or isn't a of type bool")
+		return errors.New("context field 'created' is not set or isn't of type bool")
 	}
 
 	token := jwt.NewWithClaims(jwtSignMethod, jwt.MapClaims{
@@ -213,7 +213,7 @@ func (s *Server) LoginUser(c echo.Context) error {
 func (s *Server) CreateInterval(c echo.Context) error {
 	username, ok := c.Get("username").(string)
 	if !ok {
-		return errors.New("context field 'username' is not set or isn't a of type string")
+		return errors.New("context field 'username' is not set or isn't of type string")
 	}
 
 	interval := validatingInterval{}
@@ -239,7 +239,7 @@ func (s *Server) CreateInterval(c echo.Context) error {
 func (s *Server) GetIntervals(c echo.Context) error {
 	username, ok := c.Get("username").(string)
 	if !ok {
-		return errors.New("context field 'username' is not set or isn't a of type string")
+		return errors.New("context field 'username' is not set or isn't of type string")
 	}
 
 	qp := c.QueryParams()
