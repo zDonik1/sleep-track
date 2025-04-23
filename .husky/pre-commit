@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+courtney -e || {
+    exit_code=$?
+    go tool cover -html=coverage.out
+    exit $exit_code
+}

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -37,6 +38,48 @@ func (d MockDatabase) AddInterval(username string, i db.Interval) (db.Interval, 
 	return db.Interval{}, nil
 }
 
+func TestMissingContextKeysInLoginUser(t *testing.T) {
+	keyvalues := map[string]interface{}{
+		"user":    "someuser",
+		"created": false,
+	}
+
+	data := []struct {
+		Name  string
+		Key   string
+		Type  string
+		Value interface{}
+	}{
+		{Name: "UserKey", Key: "user", Type: "string"},
+		{Name: "CreatedKey", Key: "created", Type: "bool"},
+	}
+
+	for _, d := range data {
+		t.Run(d.Name, func(t *testing.T) {
+			serv := New()
+			serv.db = MockDatabase{}
+			e := echo.New()
+			ctx := e.AcquireContext()
+			defer e.ReleaseContext(ctx)
+
+			for k, v := range keyvalues {
+				if k == d.Key {
+					continue
+				}
+				ctx.Set(k, v)
+			}
+
+			err := serv.LoginUser(ctx)
+
+			assert.ErrorContains(t, err, fmt.Sprintf(
+				"context field '%s' is not set or isn't a of type %s",
+				d.Key,
+				d.Type,
+			))
+		})
+	}
+}
+
 func TestMissingUsernameContextKey(t *testing.T) {
 	data := []struct {
 		Name    string
@@ -56,7 +99,11 @@ func TestMissingUsernameContextKey(t *testing.T) {
 
 			err := d.Handler(serv, ctx)
 
-			assert.ErrorContains(t, err, "context field 'username' is not set or isn't a of type string")
+			assert.ErrorContains(
+				t,
+				err,
+				"context field 'username' is not set or isn't a of type string",
+			)
 		})
 	}
 }

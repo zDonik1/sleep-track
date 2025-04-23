@@ -128,7 +128,9 @@ func New() *Server {
 	return &Server{
 		db:       &db.SqlDatabase{},
 		dbSource: "./sleep-track.db",
-		now:      func() time.Time { return time.Now() },
+		now: func() time.Time { // notest
+			return time.Now()
+		},
 	}
 }
 
@@ -162,7 +164,7 @@ func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, 
 	if !exists {
 		hash, err := bcrypt.GenerateFromPassword([]byte(pass), COST)
 		if err != nil {
-			return false, echo.NewHTTPError(http.StatusUnauthorized, err)
+			return false, err
 		}
 		s.db.AddUser(db.User{Name: username, PassHash: hash})
 		c.Logger().Infof("New user signed up: %s", username)
@@ -185,11 +187,11 @@ func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, 
 func (s *Server) LoginUser(c echo.Context) error {
 	username, ok := c.Get("user").(string)
 	if !ok {
-		return errors.New("could not cast context field 'user' to string")
+		return errors.New("context field 'user' is not set or isn't a of type string")
 	}
 	created, ok := c.Get("created").(bool)
 	if !ok {
-		return errors.New("could not cast context field 'created' to bool")
+		return errors.New("context field 'created' is not set or isn't a of type bool")
 	}
 
 	token := jwt.NewWithClaims(jwtSignMethod, jwt.MapClaims{
@@ -268,8 +270,11 @@ func (s *Server) GetIntervals(c echo.Context) error {
 
 func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
 	keyFunc := func(token *jwt.Token) (interface{}, error) {
-		if token.Method.Alg() != jwtSignMethod.Alg() {
-			return nil, &echojwt.TokenError{Token: token, Err: fmt.Errorf("unexpected jwt signing method=%v", token.Header["alg"])}
+		if token.Method.Alg() != jwtSignMethod.Alg() { // notest
+			return nil, &echojwt.TokenError{
+				Token: token,
+				Err:   fmt.Errorf("unexpected jwt signing method=%v", token.Header["alg"]),
+			}
 		}
 		return key, nil
 	}
@@ -285,11 +290,11 @@ func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
 			if err != nil {
 				return nil, &echojwt.TokenError{Token: token, Err: err}
 			}
-			if !token.Valid {
+			if !token.Valid { // notest
 				return nil, &echojwt.TokenError{Token: token, Err: errors.New("invalid token")}
 			}
 			sub, err := token.Claims.GetSubject()
-			if err != nil {
+			if err != nil { // notest
 				return nil, &echojwt.TokenError{Token: token, Err: err}
 			}
 

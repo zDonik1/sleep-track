@@ -110,7 +110,7 @@ func (d *SqlDatabase) GetIntervals(username string, start, end time.Time) ([]Int
 		}
 		result = append(result, i)
 	}
-	if rows.Err() != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return result, nil

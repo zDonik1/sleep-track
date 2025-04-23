@@ -224,10 +224,22 @@ func (s *ServerSuite) TestCreateInterval() {
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
 		{
-			Name:           "MissingFields",
-			Body:           `{"quality":1}`,
+			Name:           "MissingStartField",
+			Body:           `{"end":"2006-01-02T15:04:05Z","quality":1}`,
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes(`missing \"start\" field`),
+		},
+		{
+			Name:           "MissingEndField",
+			Body:           `{"start":"2006-01-02T15:04:05Z","quality":1}`,
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes(`missing \"end\" field`),
+		},
+		{
+			Name:           "MissingQualityField",
+			Body:           `{"start":"2006-01-02T15:04:05Z","end":"2006-01-02T15:04:05Z"}`,
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes(`missing \"quality\" field`),
 		},
 		{
 			Name:           "MissingBody",
