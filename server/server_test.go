@@ -57,7 +57,6 @@ func TestMissingContextKeysInLoginUser(t *testing.T) {
 	for _, d := range data {
 		t.Run(d.Name, func(t *testing.T) {
 			serv := New()
-			serv.db = MockDatabase{}
 			e := echo.New()
 			ctx := e.AcquireContext()
 			defer e.ReleaseContext(ctx)
@@ -92,7 +91,6 @@ func TestMissingUsernameContextKey(t *testing.T) {
 	for _, d := range data {
 		t.Run(d.Name, func(t *testing.T) {
 			serv := New()
-			serv.db = MockDatabase{}
 			e := echo.New()
 			ctx := e.AcquireContext()
 			defer e.ReleaseContext(ctx)
