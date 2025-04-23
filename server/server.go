@@ -269,8 +269,39 @@ func (s *Server) GetIntervals(c echo.Context) error {
 }
 
 func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
+	// JWT middleware is wrapped with our UserVerification handler
+	// echo -> JWT -> UserVerification -> next
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		userVerification := func(c echo.Context) error {
+			token, ok := c.Get("user").(*jwt.Token)
+			if !ok { // notest: since directly connected to JwtMiddleware in same scope
+				return errors.New("context field 'user' is not set or isn't of type *jwt.Token")
+			}
+			sub, err := token.Claims.GetSubject()
+			if err != nil {
+				return err
+			}
+			exists, err := s.db.UserExists(sub)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return echo.NewHTTPError(http.StatusUnauthorized, "invalid or expired jwt")
+			}
+			c.Set("username", sub)
+			return next(c)
+		}
+
+		jwtMw := echojwt.WithConfig(echojwt.Config{ParseTokenFunc: s.parseTokenFunc})
+		return jwtMw(userVerification)
+	}
+}
+
+// Implementation taken from echojwt. Only necessary so we can pass custom time func
+// for parsing claims
+func (s *Server) parseTokenFunc(_ echo.Context, auth string) (interface{}, error) { // notest
 	keyFunc := func(token *jwt.Token) (interface{}, error) {
-		if token.Method.Alg() != jwtSignMethod.Alg() { // notest
+		if token.Method.Alg() != jwtSignMethod.Alg() {
 			return nil, &echojwt.TokenError{
 				Token: token,
 				Err:   fmt.Errorf("unexpected jwt signing method=%v", token.Header["alg"]),
@@ -279,36 +310,14 @@ func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
 		return key, nil
 	}
 
-	return echojwt.WithConfig(echojwt.Config{
-		ParseTokenFunc: func(c echo.Context, auth string) (interface{}, error) {
-			token, err := jwt.ParseWithClaims(
-				auth,
-				jwt.MapClaims{},
-				keyFunc,
-				jwt.WithTimeFunc(s.now),
-			)
-			if err != nil {
-				return nil, &echojwt.TokenError{Token: token, Err: err}
-			}
-			if !token.Valid { // notest
-				return nil, &echojwt.TokenError{Token: token, Err: errors.New("invalid token")}
-			}
-			sub, err := token.Claims.GetSubject()
-			if err != nil { // notest
-				return nil, &echojwt.TokenError{Token: token, Err: err}
-			}
-
-			exists, err := s.db.UserExists(sub)
-			if err != nil {
-				return nil, err
-			}
-			if !exists {
-				return nil, fmt.Errorf("user \"%s\" doesn't exist", sub)
-			}
-			c.Set("username", sub)
-			return token, nil
-		},
-	})
+	token, err := jwt.ParseWithClaims(auth, jwt.MapClaims{}, keyFunc, jwt.WithTimeFunc(s.now))
+	if err != nil {
+		return nil, &echojwt.TokenError{Token: token, Err: err}
+	}
+	if !token.Valid {
+		return nil, &echojwt.TokenError{Token: token, Err: errors.New("invalid token")}
+	}
+	return token, nil
 }
 
 func addExpiryDuration(t time.Time) time.Time {
