@@ -39,6 +39,8 @@ func (d MockDatabase) AddInterval(username string, i db.Interval) (db.Interval, 
 }
 
 func TestMissingContextKeysInLoginUser(t *testing.T) {
+	t.Parallel()
+
 	keyvalues := map[string]interface{}{
 		"user":    "someuser",
 		"created": false,
@@ -56,6 +58,8 @@ func TestMissingContextKeysInLoginUser(t *testing.T) {
 
 	for _, d := range data {
 		t.Run(d.Name, func(t *testing.T) {
+			t.Parallel()
+
 			serv := New()
 			e := echo.New()
 			ctx := e.AcquireContext()
@@ -80,6 +84,8 @@ func TestMissingContextKeysInLoginUser(t *testing.T) {
 }
 
 func TestMissingUsernameContextKey(t *testing.T) {
+	t.Parallel()
+
 	data := []struct {
 		Name    string
 		Handler func(*Server, echo.Context) error
@@ -90,6 +96,8 @@ func TestMissingUsernameContextKey(t *testing.T) {
 
 	for _, d := range data {
 		t.Run(d.Name, func(t *testing.T) {
+			t.Parallel()
+
 			serv := New()
 			e := echo.New()
 			ctx := e.AcquireContext()
@@ -104,4 +112,10 @@ func TestMissingUsernameContextKey(t *testing.T) {
 			)
 		})
 	}
+}
+
+func TestAddExpiryDuration(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, TEST_TIME.Add(24*time.Hour), addExpiryDuration(TEST_TIME))
 }

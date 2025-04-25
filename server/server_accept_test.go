@@ -12,7 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/require"
 	db "github.com/zDonik1/sleep-track/database"
 	ut "github.com/zDonik1/sleep-track/utils"
 	"golang.org/x/crypto/bcrypt"
@@ -34,59 +34,39 @@ var (
 )
 
 type ServerSuite struct {
-	suite.Suite
-
-	ech  *echo.Echo
-	serv *Server
-	rec  *httptest.ResponseRecorder
+	Ech  *echo.Echo
+	Serv *Server
+	Rec  *httptest.ResponseRecorder
+	t    *testing.T
 }
 
-func (s *ServerSuite) SetupTest() {
-	s.setup()
-}
+func (s *ServerSuite) setup(t *testing.T) {
+	s.Ech = echo.New()
+	s.Serv = New()
+	s.Serv.dbSource = ":memory:"
+	s.Serv.now = func() time.Time { return TEST_TIME }
+	s.Rec = httptest.NewRecorder()
+	s.t = t
 
-func (s *ServerSuite) SetupSubTest() {
-	s.setup()
-}
-
-func (s *ServerSuite) TearDownTest() {
-	s.teardown()
-}
-
-func (s *ServerSuite) TearDownSubTest() {
-	s.teardown()
-}
-
-func (s *ServerSuite) setup() {
-	s.ech = echo.New()
-	s.serv = New()
-	s.serv.dbSource = ":memory:"
-	s.serv.now = func() time.Time { return TEST_TIME }
-	s.rec = httptest.NewRecorder()
-
-	err := s.serv.OpenDb()
-	s.NoError(err)
+	err := s.Serv.OpenDb()
+	require.NoError(t, err)
 }
 
 func (s *ServerSuite) teardown() {
-	s.NoError(s.serv.CloseDb())
+	require.NoError(s.t, s.Serv.CloseDb())
 }
 
 func (s *ServerSuite) setupDbWithUser() {
 	hash, err := bcrypt.GenerateFromPassword([]byte(TEST_PASS), COST)
-	s.NoError(err)
-	err = s.serv.db.AddUser(db.User{Name: TEST_USER, PassHash: hash})
-	s.NoError(err)
-}
-
-func (s *ServerSuite) intrToJson(interval db.Interval) string {
-	res, err := json.Marshal(fromInterval(interval))
-	s.Require().NoError(err)
-	return string(res) + "\n"
+	require.NoError(s.t, err)
+	err = s.Serv.db.AddUser(db.User{Name: TEST_USER, PassHash: hash})
+	require.NoError(s.t, err)
 }
 
 // TestLoginUser also tests AuthenticateUser middleware since it is only used in this endpoint
-func (s *ServerSuite) TestLoginUser() {
+func TestLoginUser(t *testing.T) {
+	t.Parallel()
+
 	data := []struct {
 		Name           string
 		SetupUser      bool
@@ -153,25 +133,32 @@ func (s *ServerSuite) TestLoginUser() {
 	}
 
 	for _, d := range data {
-		s.Run(d.Name, func() {
+		t.Run(d.Name, func(t *testing.T) {
+			t.Parallel()
+
+			s := ServerSuite{}
+			s.setup(t)
+			defer s.teardown()
 			if d.SetupUser {
 				s.setupDbWithUser()
 			}
-			s.ech.POST("/login", s.serv.LoginUser, middleware.BasicAuth(s.serv.AuthenticateUser))
+			s.Ech.POST("/login", s.Serv.LoginUser, middleware.BasicAuth(s.Serv.AuthenticateUser))
 			req := httptest.NewRequest(http.MethodPost, "/login", nil)
 			if d.SetupBasicAuth {
 				req.SetBasicAuth(d.Username, d.Password)
 			}
 
-			s.ech.ServeHTTP(s.rec, req)
+			s.Ech.ServeHTTP(s.Rec, req)
 
-			s.Equal(d.ExpectedStatus, s.rec.Code)
-			s.Equal(d.ExpectedBody, s.rec.Body.String())
+			assert.Equal(t, d.ExpectedStatus, s.Rec.Code)
+			assert.Equal(t, d.ExpectedBody, s.Rec.Body.String())
 		})
 	}
 }
 
-func (s *ServerSuite) TestCreateInterval() {
+func TestCreateInterval(t *testing.T) {
+	t.Parallel()
+
 	start := START
 	end := start.Add(8 * time.Hour)
 
@@ -183,19 +170,19 @@ func (s *ServerSuite) TestCreateInterval() {
 	}{
 		{
 			Name:           "ValidInterval",
-			Body:           s.intrToJson(db.Interval{Start: start, End: end, Quality: 1}),
+			Body:           intrToJson(t, db.Interval{Start: start, End: end, Quality: 1}),
 			ExpectedStatus: http.StatusCreated,
-			ExpectedBody:   s.intrToJson(db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
+			ExpectedBody:   intrToJson(t, db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
 		},
 		{
 			Name:           "IgnoreId",
-			Body:           s.intrToJson(db.Interval{Id: 10, Start: start, End: end, Quality: 1}),
+			Body:           intrToJson(t, db.Interval{Id: 10, Start: start, End: end, Quality: 1}),
 			ExpectedStatus: http.StatusCreated,
-			ExpectedBody:   s.intrToJson(db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
+			ExpectedBody:   intrToJson(t, db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
 		},
 		{
 			Name:           "EndBeforeStart",
-			Body:           s.intrToJson(db.Interval{Start: end, End: start, Quality: 1}),
+			Body:           intrToJson(t, db.Interval{Start: end, End: start, Quality: 1}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("interval end is the same or before start"),
 		},
@@ -213,13 +200,13 @@ func (s *ServerSuite) TestCreateInterval() {
 		},
 		{
 			Name:           "QualityBelowRange",
-			Body:           s.intrToJson(db.Interval{Start: start, End: end, Quality: 0}),
+			Body:           intrToJson(t, db.Interval{Start: start, End: end, Quality: 0}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
 		{
 			Name:           "QualityAboveRange",
-			Body:           s.intrToJson(db.Interval{Start: start, End: end, Quality: 10}),
+			Body:           intrToJson(t, db.Interval{Start: start, End: end, Quality: 10}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
@@ -250,24 +237,31 @@ func (s *ServerSuite) TestCreateInterval() {
 	}
 
 	for _, d := range data {
-		s.Run(d.Name, func() {
+		t.Run(d.Name, func(t *testing.T) {
+			t.Parallel()
+
+			s := ServerSuite{}
+			s.setup(t)
+			defer s.teardown()
 			s.setupDbWithUser()
-			s.ech.POST("/intervals", s.serv.CreateInterval, s.serv.JwtMiddleware())
+			s.Ech.POST("/intervals", s.Serv.CreateInterval, s.Serv.JwtMiddleware())
 			req := httptest.NewRequest(http.MethodPost, "/intervals", strings.NewReader(d.Body))
 			req.Header.Add("Authorization", "Bearer "+EXPECTED_JWT)
 
-			s.ech.ServeHTTP(s.rec, req)
+			s.Ech.ServeHTTP(s.Rec, req)
 
-			s.Equal(d.ExpectedStatus, s.rec.Result().StatusCode)
-			s.Equal(d.ExpectedBody, s.rec.Body.String())
+			assert.Equal(t, d.ExpectedStatus, s.Rec.Result().StatusCode)
+			assert.Equal(t, d.ExpectedBody, s.Rec.Body.String())
 		})
 	}
 }
 
-func (s *ServerSuite) TestGetIntervals() {
-	toJson := func(intervals []db.Interval) string {
+func TestGetIntervals(t *testing.T) {
+	t.Parallel()
+
+	toJson := func(t *testing.T, intervals []db.Interval) string {
 		res, err := json.Marshal(map[string]any{"intervals": ut.Map(intervals, fromInterval)})
-		s.NoError(err)
+		require.NoError(t, err)
 		return string(res) + "\n"
 	}
 
@@ -301,7 +295,7 @@ func (s *ServerSuite) TestGetIntervals() {
 			IntervalsInDb:  []db.Interval{intervalOne},
 			Query:          makeValidQuery(intervalOne.Start, intervalOne.End),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson([]db.Interval{intervalOneWithId}),
+			ExpectedBody:   toJson(t, []db.Interval{intervalOneWithId}),
 		},
 		{
 			Name:          "PartiaOverlap",
@@ -311,14 +305,14 @@ func (s *ServerSuite) TestGetIntervals() {
 				intervalOne.End.Add(2*time.Hour),
 			),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson([]db.Interval{intervalOneWithId}),
+			ExpectedBody:   toJson(t, []db.Interval{intervalOneWithId}),
 		},
 		{
 			Name:           "EdgeOverlap",
 			IntervalsInDb:  []db.Interval{intervalOne},
 			Query:          makeValidQuery(intervalOne.End, intervalOne.End.Add(4*time.Hour)),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson([]db.Interval{intervalOneWithId}),
+			ExpectedBody:   toJson(t, []db.Interval{intervalOneWithId}),
 		},
 		{
 			Name:          "NoOverlap",
@@ -328,7 +322,7 @@ func (s *ServerSuite) TestGetIntervals() {
 				intervalOne.End.Add(5*time.Hour),
 			),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson([]db.Interval{}),
+			ExpectedBody:   toJson(t, []db.Interval{}),
 		},
 		{
 			Name:          "TwoIntervalOverlap",
@@ -338,7 +332,7 @@ func (s *ServerSuite) TestGetIntervals() {
 				intervalTwo.Start.Add(2*time.Hour),
 			),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson([]db.Interval{intervalOneWithId, intervalTwoWithId}),
+			ExpectedBody:   toJson(t, []db.Interval{intervalOneWithId, intervalTwoWithId}),
 		},
 		{
 			Name:          "SortedByStartTime",
@@ -348,14 +342,14 @@ func (s *ServerSuite) TestGetIntervals() {
 				intervalTwo.Start.Add(2*time.Hour),
 			),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson([]db.Interval{addId(intervalOne, 2), addId(intervalTwo, 1)}),
+			ExpectedBody:   toJson(t, []db.Interval{addId(intervalOne, 2), addId(intervalTwo, 1)}),
 		},
 		{
 			Name:           "NoIntervals",
 			IntervalsInDb:  []db.Interval{},
 			Query:          makeValidQuery(intervalOne.Start, intervalOne.End),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson([]db.Interval{}),
+			ExpectedBody:   toJson(t, []db.Interval{}),
 		},
 		{
 			Name:           "MissingQuery",
@@ -408,27 +402,34 @@ func (s *ServerSuite) TestGetIntervals() {
 	}
 
 	for _, d := range data {
-		s.Run(d.Name, func() {
+		t.Run(d.Name, func(t *testing.T) {
+			t.Parallel()
+
+			s := ServerSuite{}
+			s.setup(t)
+			defer s.teardown()
 			s.setupDbWithUser()
 			for _, i := range d.IntervalsInDb {
-				_, err := s.serv.db.AddInterval(TEST_USER, i)
-				s.NoError(err)
+				_, err := s.Serv.db.AddInterval(TEST_USER, i)
+				require.NoError(t, err)
 			}
 
-			s.ech.GET("/intervals", s.serv.GetIntervals, s.serv.JwtMiddleware())
+			s.Ech.GET("/intervals", s.Serv.GetIntervals, s.Serv.JwtMiddleware())
 			req := httptest.NewRequest(http.MethodGet, "/intervals"+d.Query, nil)
 			req.Header.Add("Authorization", "Bearer "+EXPECTED_JWT)
 
-			s.ech.ServeHTTP(s.rec, req)
+			s.Ech.ServeHTTP(s.Rec, req)
 
-			s.Equal(d.ExpectedStatus, s.rec.Result().StatusCode)
-			s.Equal(d.ExpectedBody, s.rec.Body.String())
+			assert.Equal(t, d.ExpectedStatus, s.Rec.Result().StatusCode)
+			assert.Equal(t, d.ExpectedBody, s.Rec.Body.String())
 		})
 
 	}
 }
 
-func (s *ServerSuite) TestJwtMiddleware() {
+func TestJwtMiddleware(t *testing.T) {
+	t.Parallel()
+
 	// JWT with sub = "testuser", exp = "2024-01-11T05:55:35.15Z"
 	const EXPIRED_JWT = "yJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
 		"eyJleHAiOjE3MDQ5NTI1MzUsInN1YiI6InRlc3R1c2VyIn0." +
@@ -474,39 +475,32 @@ func (s *ServerSuite) TestJwtMiddleware() {
 	// never creates JWT with empty subjec. Verified by TestLoginUser tests.
 
 	for _, d := range data {
-		s.Run(d.Name, func() {
+		t.Run(d.Name, func(t *testing.T) {
+			t.Parallel()
+
+			s := ServerSuite{}
+			s.setup(t)
+			defer s.teardown()
 			if d.SetupUser {
 				s.setupDbWithUser()
 			}
-			s.ech.POST(
+			s.Ech.POST(
 				"/temp",
 				func(c echo.Context) error {
-					s.Fail("Should never reach handler")
+					assert.Fail(t, "should never reach handler")
 					return nil
 				},
-				s.serv.JwtMiddleware(),
+				s.Serv.JwtMiddleware(),
 			)
 			req := httptest.NewRequest(http.MethodPost, "/temp", nil)
 			req.Header.Add("Authorization", "Bearer "+d.Jwt)
 
-			s.ech.ServeHTTP(s.rec, req)
+			s.Ech.ServeHTTP(s.Rec, req)
 
-			s.Equal(d.ExpectedStatus, s.rec.Result().StatusCode)
-			s.Equal(d.ExpectedBody, s.rec.Body.String())
+			assert.Equal(t, d.ExpectedStatus, s.Rec.Result().StatusCode)
+			assert.Equal(t, d.ExpectedBody, s.Rec.Body.String())
 		})
 	}
-}
-
-func TestServerSuite(t *testing.T) {
-	suite.Run(t, new(ServerSuite))
-}
-
-// ------------------------------------------------
-// OTHER TESTS
-// ------------------------------------------------
-
-func TestAddExpiryDuration(t *testing.T) {
-	assert.Equal(t, TEST_TIME.Add(24*time.Hour), addExpiryDuration(TEST_TIME))
 }
 
 // ------------------------------------------------
@@ -515,4 +509,10 @@ func TestAddExpiryDuration(t *testing.T) {
 
 func jsonMes(mes string) string {
 	return fmt.Sprintf(`{"message":"%s"}`+"\n", mes)
+}
+
+func intrToJson(t *testing.T, interval db.Interval) string {
+	res, err := json.Marshal(fromInterval(interval))
+	require.NoError(t, err)
+	return string(res) + "\n"
 }
