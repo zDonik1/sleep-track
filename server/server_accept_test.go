@@ -69,7 +69,7 @@ func (s *ServerSuite) setup() {
 }
 
 func (s *ServerSuite) teardown() {
-	s.serv.CloseDb()
+	s.NoError(s.serv.CloseDb())
 }
 
 func (s *ServerSuite) setupDbWithUser() {

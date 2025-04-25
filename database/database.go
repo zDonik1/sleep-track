@@ -23,7 +23,7 @@ type Interval struct {
 
 type Database interface {
 	Open(driver Driver, source string) error
-	Close()
+	Close() error
 	UserExists(username string) (bool, error)
 	GetUser(username string) (*User, error)
 	GetIntervals(username string, start, end time.Time) ([]Interval, error)
@@ -58,8 +58,8 @@ func (d *SqlDatabase) Open(driver Driver, source string) error {
 	return nil
 }
 
-func (d *SqlDatabase) Close() {
-	d.db.Close()
+func (d *SqlDatabase) Close() error {
+	return d.db.Close()
 }
 
 func (d *SqlDatabase) UserExists(username string) (bool, error) {

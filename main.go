@@ -30,7 +30,7 @@ func setupConfig() (*Config, error) {
 	}
 
 	if !slices.Contains([]string{"text", "json"}, config.LogFormat) {
-		return nil, fmt.Errorf("Allowed values for --log-format (-l): [text, json]. Given '%s'",
+		return nil, fmt.Errorf("allowed values for --log-format (-l): [text, json]. Given '%s'",
 			config.LogFormat)
 	}
 	return &config, nil
@@ -63,7 +63,11 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	defer s.CloseDb()
+	defer func() {
+		if err := s.CloseDb(); err != nil {
+			panic(err)
+		}
+	}()
 
 	e.POST("/login", s.LoginUser, middleware.BasicAuth(s.AuthenticateUser))
 

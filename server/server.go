@@ -138,8 +138,8 @@ func (s *Server) OpenDb() error {
 	return s.db.Open(db.DriverSqlite, s.dbSource)
 }
 
-func (s *Server) CloseDb() {
-	s.db.Close()
+func (s *Server) CloseDb() error {
+	return s.db.Close()
 }
 
 func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, error) {
