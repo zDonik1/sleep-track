@@ -166,7 +166,10 @@ func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, 
 		if err != nil {
 			return false, err
 		}
-		s.db.AddUser(db.User{Name: username, PassHash: hash})
+		err = s.db.AddUser(db.User{Name: username, PassHash: hash})
+		if err != nil {
+			return false, err
+		}
 		c.Logger().Infof("New user signed up: %s", username)
 	} else {
 		user, err := s.db.GetUser(username)

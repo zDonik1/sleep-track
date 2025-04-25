@@ -22,8 +22,12 @@ func setupConfig() (*Config, error) {
 	var config Config
 	pflag.StringP("log-format", "l", "text", "Set log format [text, json]")
 	pflag.Parse()
-	viper.BindPFlags(pflag.CommandLine)
-	viper.Unmarshal(&config)
+	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
+		return nil, err
+	}
+	if err := viper.Unmarshal(&config); err != nil {
+		return nil, err
+	}
 
 	if !slices.Contains([]string{"text", "json"}, config.LogFormat) {
 		return nil, fmt.Errorf("Allowed values for --log-format (-l): [text, json]. Given '%s'",

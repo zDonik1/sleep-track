@@ -41,6 +41,7 @@
             gotest
             husky
             courtney
+            golangci-lint
           ];
         };
       }

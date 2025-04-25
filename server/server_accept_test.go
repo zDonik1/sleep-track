@@ -411,7 +411,8 @@ func (s *ServerSuite) TestGetIntervals() {
 		s.Run(d.Name, func() {
 			s.setupDbWithUser()
 			for _, i := range d.IntervalsInDb {
-				s.serv.db.AddInterval(TEST_USER, i)
+				_, err := s.serv.db.AddInterval(TEST_USER, i)
+				s.NoError(err)
 			}
 
 			s.ech.GET("/intervals", s.serv.GetIntervals, s.serv.JwtMiddleware())
