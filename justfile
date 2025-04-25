@@ -19,3 +19,8 @@ devtest *ARGS:
 [group("nix develop")]
 run:
     nix develop -c go run main.go
+
+# run lint and format check
+[group("nix develop")]
+lint:
+    nix develop -c bash -c "golangci-lint run && golangci-lint fmt -d"
