@@ -72,6 +72,7 @@ func main() {
 	e.POST("/login", s.LoginUser, middleware.BasicAuth(s.AuthenticateUser))
 
 	intervalsGroup := e.Group("/intervals", s.JwtMiddleware())
+	intervalsGroup.GET("", s.GetIntervals)
 	intervalsGroup.POST("", s.CreateInterval)
 
 	e.Logger.Fatal(e.Start(":8001"))
