@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 
 type MockDatabase struct{}
 
-func (d MockDatabase) Open(driver db.Driver, source string) error {
+func (d MockDatabase) Open(source string) error {
 	return nil
 }
 
@@ -38,7 +39,26 @@ func (d MockDatabase) AddInterval(username string, i db.Interval) (db.Interval, 
 	return db.Interval{}, nil
 }
 
-func TestMissingContextKeysInLoginUser(t *testing.T) {
+func TestUnitServer(t *testing.T) {
+	t.Parallel()
+	integration := os.Getenv("INTEGRATION")
+
+	tests := map[string](func(t *testing.T)){
+		"MissingUsernameContextKey":     testMissingUsernameContextKey,
+		"MissingContextKeysInLoginUser": testMissingContextKeysInLoginUser,
+		"AddExpiryDuration":             testAddExpiryDuration,
+	}
+
+	if integration != "1" {
+		for name, test := range tests {
+			t.Run(name, test)
+		}
+	} else {
+		t.SkipNow()
+	}
+}
+
+func testMissingContextKeysInLoginUser(t *testing.T) {
 	t.Parallel()
 
 	keyvalues := map[string]interface{}{
@@ -83,7 +103,7 @@ func TestMissingContextKeysInLoginUser(t *testing.T) {
 	}
 }
 
-func TestMissingUsernameContextKey(t *testing.T) {
+func testMissingUsernameContextKey(t *testing.T) {
 	t.Parallel()
 
 	data := []struct {
@@ -114,7 +134,7 @@ func TestMissingUsernameContextKey(t *testing.T) {
 	}
 }
 
-func TestAddExpiryDuration(t *testing.T) {
+func testAddExpiryDuration(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, TEST_TIME.Add(24*time.Hour), addExpiryDuration(TEST_TIME))

@@ -16,6 +16,7 @@ import (
 
 type Config struct {
 	LogFormat string `mapstructure:"log-format"`
+	DbSource  string `mapstructure:"db-source"`
 }
 
 func setupConfig() (*Config, error) {
@@ -25,6 +26,7 @@ func setupConfig() (*Config, error) {
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
 		return nil, err
 	}
+	viper.SetDefault("db-source", "./sleep-track.db")
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, err
 	}
@@ -59,7 +61,7 @@ func main() {
 
 	e := setupEcho(conf)
 	s := server.New()
-	if err = s.OpenDb(); err != nil {
+	if err = s.OpenDb(conf.DbSource); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}

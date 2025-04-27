@@ -2,15 +2,20 @@ package server
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/gommon/log"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	db "github.com/zDonik1/sleep-track/database"
@@ -19,6 +24,7 @@ import (
 )
 
 const (
+	DB_SOURCE    = ""
 	TEST_USER    = "testuser"
 	TEST_PASS    = "testpass"
 	ANOTHER_PASS = "otherpass"
@@ -31,6 +37,8 @@ const (
 var (
 	TEST_TIME = time.Date(2024, time.January, 12, 5, 55, 35, 150, time.UTC)
 	START     = time.Date(2024, time.January, 12, 21, 0, 0, 0, time.UTC)
+
+	_ = flag.Bool("verbose", false, "Set verbose log output")
 )
 
 type ServerSuite struct {
@@ -42,17 +50,22 @@ type ServerSuite struct {
 
 func (s *ServerSuite) setup(t *testing.T) {
 	s.Ech = echo.New()
+	if viper.GetBool("verbose") {
+		s.Ech.Logger.SetLevel(log.DEBUG)
+		s.Ech.Logger.SetHeader("${time_rfc3339} ${level} ${prefix} ${short_file}:${line}")
+		s.Ech.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Format: "${time_rfc3339} " +
+			"http ${remote_ip} ${method} ${uri} => ${status} ${error}\n"}))
+	}
 	s.Serv = New()
-	s.Serv.dbSource = ":memory:"
 	s.Serv.now = func() time.Time { return TEST_TIME }
 	s.Rec = httptest.NewRecorder()
 	s.t = t
 
-	err := s.Serv.OpenDb()
-	require.NoError(t, err)
+	require.NoError(t, s.Serv.OpenDb(DB_SOURCE))
 }
 
 func (s *ServerSuite) teardown() {
+	require.NoError(s.t, s.Serv.db.Wipe())
 	require.NoError(s.t, s.Serv.CloseDb())
 }
 
@@ -63,10 +76,30 @@ func (s *ServerSuite) setupDbWithUser() {
 	require.NoError(s.t, err)
 }
 
-// TestLoginUser also tests AuthenticateUser middleware since it is only used in this endpoint
-func TestLoginUser(t *testing.T) {
+func TestAcceptServer(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "0" {
+		t.SkipNow()
+	}
 	t.Parallel()
 
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
+	pflag.Parse()
+	require.NoError(t, viper.BindPFlags(pflag.CommandLine))
+
+	tests := map[string](func(t *testing.T)){
+		"LoginUser":      testLoginUser,
+		"CreateInterval": testCreateInterval,
+		"GetIntervals":   testGetIntervals,
+		"JwtMiddleware":  testJwtMiddleware,
+	}
+
+	for name, test := range tests {
+		t.Run(name, test)
+	}
+}
+
+// testLoginUser also tests AuthenticateUser middleware since it is only used in this endpoint
+func testLoginUser(t *testing.T) {
 	data := []struct {
 		Name           string
 		SetupUser      bool
@@ -134,8 +167,6 @@ func TestLoginUser(t *testing.T) {
 
 	for _, d := range data {
 		t.Run(d.Name, func(t *testing.T) {
-			t.Parallel()
-
 			s := ServerSuite{}
 			s.setup(t)
 			defer s.teardown()
@@ -156,9 +187,7 @@ func TestLoginUser(t *testing.T) {
 	}
 }
 
-func TestCreateInterval(t *testing.T) {
-	t.Parallel()
-
+func testCreateInterval(t *testing.T) {
 	start := START
 	end := start.Add(8 * time.Hour)
 
@@ -238,8 +267,6 @@ func TestCreateInterval(t *testing.T) {
 
 	for _, d := range data {
 		t.Run(d.Name, func(t *testing.T) {
-			t.Parallel()
-
 			s := ServerSuite{}
 			s.setup(t)
 			defer s.teardown()
@@ -256,9 +283,7 @@ func TestCreateInterval(t *testing.T) {
 	}
 }
 
-func TestGetIntervals(t *testing.T) {
-	t.Parallel()
-
+func testGetIntervals(t *testing.T) {
 	toJson := func(t *testing.T, intervals []db.Interval) string {
 		res, err := json.Marshal(map[string]any{"intervals": ut.Map(intervals, fromInterval)})
 		require.NoError(t, err)
@@ -403,8 +428,6 @@ func TestGetIntervals(t *testing.T) {
 
 	for _, d := range data {
 		t.Run(d.Name, func(t *testing.T) {
-			t.Parallel()
-
 			s := ServerSuite{}
 			s.setup(t)
 			defer s.teardown()
@@ -427,9 +450,7 @@ func TestGetIntervals(t *testing.T) {
 	}
 }
 
-func TestJwtMiddleware(t *testing.T) {
-	t.Parallel()
-
+func testJwtMiddleware(t *testing.T) {
 	// JWT with sub = "testuser", exp = "2024-01-11T05:55:35.15Z"
 	const EXPIRED_JWT = "yJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
 		"eyJleHAiOjE3MDQ5NTI1MzUsInN1YiI6InRlc3R1c2VyIn0." +
@@ -476,8 +497,6 @@ func TestJwtMiddleware(t *testing.T) {
 
 	for _, d := range data {
 		t.Run(d.Name, func(t *testing.T) {
-			t.Parallel()
-
 			s := ServerSuite{}
 			s.setup(t)
 			defer s.teardown()

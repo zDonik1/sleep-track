@@ -1,12 +1,10 @@
 package database
 
 import (
-	"database/sql"
-	_ "embed"
-	"fmt"
+	"context"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/jackc/pgx/v5"
 )
 
 type User struct {
@@ -22,8 +20,9 @@ type Interval struct {
 }
 
 type Database interface {
-	Open(driver Driver, source string) error
+	Open(source string) error
 	Close() error
+	Wipe() error
 	UserExists(username string) (bool, error)
 	GetUser(username string) (*User, error)
 	GetIntervals(username string, start, end time.Time) ([]Interval, error)
@@ -31,43 +30,54 @@ type Database interface {
 	AddInterval(username string, i Interval) (Interval, error)
 }
 
-type SqlDatabase struct {
-	db *sql.DB
-}
+var schema = `
+CREATE TABLE IF NOT EXISTS Users (
+    Name TEXT PRIMARY KEY NOT NULL,
+    PassHash BYTEA NOT NULL
+);
 
-type Driver string
+CREATE TABLE IF NOT EXISTS Intervals (
+    Id SERIAL PRIMARY KEY,
+    IntrStart TIMESTAMP WITH TIME ZONE NOT NULL,
+    IntrEnd TIMESTAMP WITH TIME ZONE NOT NULL,
+    Quality INTEGER NOT NULL,
+    Username TEXT,
+    FOREIGN KEY (Username) REFERENCES Users(Name)
+);
+`
 
-const (
-	DriverSqlite Driver = "sqlite3"
-)
+type SqlDatabase struct{ conn *pgx.Conn }
 
-//go:embed sqlite_schema.sql
-var createSchema string
-
-func (d *SqlDatabase) Open(driver Driver, source string) error {
-	db, err := sql.Open("sqlite3", source)
+func (d *SqlDatabase) Open(source string) error {
+	conn, err := pgx.Connect(context.Background(), source)
 	if err != nil {
 		return err
 	}
-	d.db = db
-
-	_, err = db.Exec(string(createSchema))
-	if err != nil {
-		return err
-	}
-	return nil
+	d.conn = conn
+	_, err = d.conn.Exec(context.Background(), schema)
+	return err
 }
 
 func (d *SqlDatabase) Close() error {
-	return d.db.Close()
+	return d.conn.Close(context.Background())
+}
+
+func (d *SqlDatabase) Wipe() error {
+	_, err := d.conn.Exec(
+		context.Background(),
+		"DROP TABLE IF EXISTS Intervals; DROP TABLE IF EXISTS Users",
+	)
+	return err
 }
 
 func (d *SqlDatabase) UserExists(username string) (bool, error) {
 	var name string
-	statement := fmt.Sprintf(`SELECT Name FROM Users WHERE Name = '%s'`, username)
-	err := d.db.QueryRow(statement).Scan(&name)
-
-	if err == sql.ErrNoRows {
+	err := d.conn.QueryRow(
+		context.Background(),
+		"SELECT Name FROM Users WHERE Name = $1",
+		username,
+	).Scan(&name)
+	if err == pgx.ErrNoRows {
 		return false, nil
 	}
 	if err != nil {
@@ -77,11 +87,13 @@ func (d *SqlDatabase) UserExists(username string) (bool, error) {
 }
 
 func (d *SqlDatabase) GetUser(username string) (*User, error) {
-	statement := fmt.Sprintf(`SELECT Name, PassHash FROM Users WHERE Name = '%s'`, username)
 	var name string
 	var hash []byte
-	err := d.db.QueryRow(statement).Scan(&name, &hash)
-
+	err := d.conn.QueryRow(
+		context.Background(),
+		"SELECT Name, PassHash FROM Users WHERE Name = $1",
+		username,
+	).Scan(&name, &hash)
 	if err != nil {
 		return nil, err
 	}
@@ -89,13 +101,12 @@ func (d *SqlDatabase) GetUser(username string) (*User, error) {
 }
 
 func (d *SqlDatabase) GetIntervals(username string, start, end time.Time) ([]Interval, error) {
-	rows, err := d.db.Query(
-		`SELECT Id, Start, End, Quality FROM Intervals `+
-			`WHERE Username = ? AND (Start <= ? AND End >= ?)`+
-			`ORDER BY Start`,
-		username,
-		end,
-		start,
+	rows, err := d.conn.Query(
+		context.Background(),
+		`SELECT Id, IntrStart AT TIME ZONE 'UTC', IntrEnd AT TIME ZONE 'UTC', Quality FROM Intervals
+		WHERE Username = $1 AND (IntrStart <= $2 AND IntrEnd >= $3)
+		ORDER BY IntrStart`,
+		username, end, start,
 	)
 	if err != nil {
 		return nil, err
@@ -117,7 +128,11 @@ func (d *SqlDatabase) GetIntervals(username string, start, end time.Time) ([]Int
 }
 
 func (d *SqlDatabase) AddUser(u User) error {
-	_, err := d.db.Exec("INSERT INTO Users VALUES (?,?)", u.Name, u.PassHash)
+	_, err := d.conn.Exec(
+		context.Background(),
+		"INSERT INTO Users VALUES ($1,$2)",
+		u.Name, u.PassHash,
+	)
 	if err != nil {
 		return err
 	}
@@ -125,22 +140,16 @@ func (d *SqlDatabase) AddUser(u User) error {
 }
 
 func (d *SqlDatabase) AddInterval(username string, i Interval) (Interval, error) {
-	r, err := d.db.Exec(
-		"INSERT INTO Intervals (Start, End, Quality, Username) VALUES (?,?,?,?)",
-		i.Start,
-		i.End,
-		i.Quality,
-		username,
-	)
+	var id int64
+	err := d.conn.QueryRow(
+		context.Background(),
+		`INSERT INTO Intervals (IntrStart, IntrEnd, Quality, Username)
+		VALUES ($1,$2,$3,$4) RETURNING Id`,
+		i.Start, i.End, i.Quality, username,
+	).Scan(&id)
 	if err != nil {
 		return Interval{}, err
 	}
-
-	id, err := r.LastInsertId()
-	if err != nil {
-		return Interval{}, err
-	}
-
 	i.Id = id
 	return i, err
 }

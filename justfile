@@ -1,5 +1,7 @@
 set shell := ["bash", "-c"]
 
+export PGDATABASE := "testsleep"
+
 help:
     @just --list --unsorted --justfile {{ justfile() }}
 
@@ -9,6 +11,11 @@ help:
 [group("nix develop")]
 dev:
     nix develop -c nu
+
+# run tests
+[group("nix develop")]
+test *ARGS:
+    nix develop -c gotest ./server -count=1 {{ ARGS }}
 
 # run tests in development mode
 [group("nix develop")]

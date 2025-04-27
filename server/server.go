@@ -120,22 +120,20 @@ var (
 type Server struct {
 	db db.Database
 
-	dbSource string
-	now      func() time.Time
+	now func() time.Time
 }
 
 func New() *Server {
 	return &Server{
-		db:       &db.SqlDatabase{},
-		dbSource: "./sleep-track.db",
+		db: &db.SqlDatabase{},
 		now: func() time.Time { // notest
 			return time.Now()
 		},
 	}
 }
 
-func (s *Server) OpenDb() error {
-	return s.db.Open(db.DriverSqlite, s.dbSource)
+func (s *Server) OpenDb(source string) error {
+	return s.db.Open(source)
 }
 
 func (s *Server) CloseDb() error {
