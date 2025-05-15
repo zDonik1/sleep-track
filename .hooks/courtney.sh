@@ -2,8 +2,6 @@
 
 set -e
 
-golangci-lint run && golangci-lint fmt -d
-
 courtney -e || {
     exit_code=$?
     go tool cover -html=coverage.out

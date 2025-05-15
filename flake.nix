@@ -39,7 +39,7 @@
           packages = with pkgs; [
             go
             gotest
-            husky
+            pre-commit
             courtney
             golangci-lint
           ];
