@@ -222,12 +222,6 @@ func testCreateInterval(t *testing.T) {
 			ExpectedBody:   jsonMes(`parsing time \"starttime\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"starttime\" as \"2006\"`),
 		},
 		{
-			Name:           "DisallowSubseconds",
-			Body:           `{"start":"2006-01-02T15:04:05.025Z","end":"2006-01-02T16:04:05.025Z","quality":1}`,
-			ExpectedStatus: http.StatusBadRequest,
-			ExpectedBody:   jsonMes("subsecond values are not allowed"),
-		},
-		{
 			Name:           "QualityBelowRange",
 			Body:           intrToJson(t, db.Interval{Start: start, End: end, Quality: 0}),
 			ExpectedStatus: http.StatusBadRequest,
@@ -416,13 +410,6 @@ func testGetIntervals(t *testing.T) {
 				`parsing time \"wrongformat\" as \"2006-01-02T15:04:05Z07:00\": ` +
 					`cannot parse \"wrongformat\" as \"2006\"`,
 			),
-		},
-		{
-			Name:           "DisallowSubseconds",
-			IntervalsInDb:  []db.Interval{intervalOne},
-			Query:          makeQuery("2006-01-02T15:04:05.025Z", "2006-01-02T16:04:05.025Z"),
-			ExpectedStatus: http.StatusBadRequest,
-			ExpectedBody:   jsonMes("subsecond values are not allowed"),
 		},
 	}
 

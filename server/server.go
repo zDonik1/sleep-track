@@ -15,48 +15,17 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type NoSsTime struct {
-	time.Time
-}
-
-func (t *NoSsTime) UnmarshalJSON(b []byte) error {
-	var tm time.Time
-	err := json.Unmarshal(b, &tm)
-	if err != nil {
-		return err
-	}
-	if tm.Nanosecond() != 0 {
-		return errors.New("subsecond values are not allowed")
-	}
-
-	t.Time = tm
-	return nil
-}
-
-func (t *NoSsTime) Parse(layout, value string) error {
-	tm, err := time.Parse(layout, value)
-	if err != nil {
-		return err
-	}
-	if tm.Nanosecond() != 0 {
-		return errors.New("subsecond values are not allowed")
-	}
-
-	t.Time = tm
-	return nil
-}
-
 type validatingInterval struct {
 	Id      int64
-	Start   NoSsTime
-	End     NoSsTime
+	Start   time.Time
+	End     time.Time
 	Quality int
 }
 
 type jsonIntervalNoId struct {
-	Start   *NoSsTime `json:"start"`
-	End     *NoSsTime `json:"end"`
-	Quality *int      `json:"quality"`
+	Start   *time.Time `json:"start"`
+	End     *time.Time `json:"end"`
+	Quality *int       `json:"quality"`
 }
 
 type jsonInterval struct {
@@ -96,14 +65,14 @@ func (i *validatingInterval) UnmarshalJSON(b []byte) error {
 }
 
 func toInterval(i validatingInterval) db.Interval {
-	return db.Interval{Id: i.Id, Start: i.Start.Time, End: i.End.Time, Quality: i.Quality}
+	return db.Interval{Id: i.Id, Start: i.Start, End: i.End, Quality: i.Quality}
 }
 
 func fromInterval(it db.Interval) validatingInterval {
 	var i validatingInterval
 	i.Id = it.Id
-	i.Start.Time = it.Start
-	i.End.Time = it.End
+	i.Start = it.Start
+	i.End = it.End
 	i.Quality = it.Quality
 	return i
 }
@@ -223,7 +192,7 @@ func (s *Server) CreateInterval(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	if interval.Start.Compare(interval.End.Time) != -1 {
+	if interval.Start.Compare(interval.End) != -1 {
 		return echo.NewHTTPError(http.StatusBadRequest, "interval end is the same or before start")
 	}
 	if interval.Quality < 1 || interval.Quality > 5 {
@@ -251,17 +220,16 @@ func (s *Server) GetIntervals(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "missing 'end' query parameter")
 	}
 
-	var start, end NoSsTime
-	err := start.Parse(time.RFC3339, qp.Get("start"))
+	start, err := time.Parse(time.RFC3339, qp.Get("start"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
-	err = end.Parse(time.RFC3339, qp.Get("end"))
+	end, err := time.Parse(time.RFC3339, qp.Get("end"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	intervals, err := s.db.GetIntervals(username, start.Time, end.Time)
+	intervals, err := s.db.GetIntervals(username, start, end)
 	if err != nil {
 		return err
 	}
