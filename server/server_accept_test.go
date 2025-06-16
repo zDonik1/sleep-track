@@ -199,19 +199,19 @@ func testCreateInterval(t *testing.T) {
 	}{
 		{
 			Name:           "ValidInterval",
-			Body:           intrToJson(t, db.Interval{Start: start, End: end, Quality: 1}),
+			Body:           toJson(t, db.Interval{Start: start, End: end, Quality: 1}),
 			ExpectedStatus: http.StatusCreated,
-			ExpectedBody:   intrToJson(t, db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
+			ExpectedBody:   toJson(t, db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
 		},
 		{
 			Name:           "IgnoreId",
-			Body:           intrToJson(t, db.Interval{Id: 10, Start: start, End: end, Quality: 1}),
+			Body:           toJson(t, db.Interval{Id: 10, Start: start, End: end, Quality: 1}),
 			ExpectedStatus: http.StatusCreated,
-			ExpectedBody:   intrToJson(t, db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
+			ExpectedBody:   toJson(t, db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
 		},
 		{
 			Name:           "EndBeforeStart",
-			Body:           intrToJson(t, db.Interval{Start: end, End: start, Quality: 1}),
+			Body:           toJson(t, db.Interval{Start: end, End: start, Quality: 1}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("interval end is the same or before start"),
 		},
@@ -223,13 +223,13 @@ func testCreateInterval(t *testing.T) {
 		},
 		{
 			Name:           "QualityBelowRange",
-			Body:           intrToJson(t, db.Interval{Start: start, End: end, Quality: 0}),
+			Body:           toJson(t, db.Interval{Start: start, End: end, Quality: 0}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
 		{
 			Name:           "QualityAboveRange",
-			Body:           intrToJson(t, db.Interval{Start: start, End: end, Quality: 10}),
+			Body:           toJson(t, db.Interval{Start: start, End: end, Quality: 10}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
@@ -247,7 +247,7 @@ func testCreateInterval(t *testing.T) {
 		},
 		{
 			Name:           "MissingQualityField",
-			Body:           `{"start":"2006-01-02T15:04:05Z","end":"2006-01-02T15:04:05Z"}`,
+			Body:           toJson(t, map[string]any{"start": start, "end": end}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes(`missing \"quality\" field`),
 		},
@@ -517,8 +517,11 @@ func jsonMes(mes string) string {
 	return fmt.Sprintf(`{"message":"%s"}`+"\n", mes)
 }
 
-func intrToJson(t *testing.T, interval db.Interval) string {
-	res, err := json.Marshal(fromInterval(interval))
+func toJson(t *testing.T, v any) string {
+	if i, ok := v.(db.Interval); ok {
+		v = fromInterval(i)
+	}
+	res, err := json.Marshal(v)
 	require.NoError(t, err)
 	return string(res) + "\n"
 }

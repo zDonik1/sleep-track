@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
@@ -15,65 +16,34 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type validatingInterval struct {
-	Id      int64
-	Start   time.Time
-	End     time.Time
-	Quality int
+var validate *validator.Validate = validator.New(validator.WithRequiredStructEnabled())
+
+var validationMessages map[string]string = map[string]string{
+	"Start required":   "missing \"start\" field",
+	"End required":     "missing \"end\" field",
+	"End gtfield":      "interval end is the same or before start",
+	"Quality required": "missing \"quality\" field",
+	"Quality gte":      "quality out of 1-5 range",
+	"Quality lte":      "quality out of 1-5 range",
 }
 
-type jsonIntervalNoId struct {
-	Start   *time.Time `json:"start"`
-	End     *time.Time `json:"end"`
-	Quality *int       `json:"quality"`
+type interval struct {
+	Id      *int64     `json:"id,omitempty"`
+	Start   *time.Time `json:"start" validate:"required"`
+	End     *time.Time `json:"end" validate:"required,gtfield=Start"`
+	Quality *int       `json:"quality" validate:"required,gte=1,lte=5"`
 }
 
-type jsonInterval struct {
-	Id *int64 `json:"id"`
-	jsonIntervalNoId
+func toInterval(i interval) db.Interval {
+	return db.Interval{Id: *i.Id, Start: *i.Start, End: *i.End, Quality: *i.Quality}
 }
 
-func (i validatingInterval) MarshalJSON() ([]byte, error) {
-	intrNoId := jsonIntervalNoId{Start: &i.Start, End: &i.End, Quality: &i.Quality}
-	if i.Id == 0 {
-		return json.Marshal(intrNoId)
-	}
-	return json.Marshal(jsonInterval{Id: &i.Id, jsonIntervalNoId: intrNoId})
-}
-
-func (i *validatingInterval) UnmarshalJSON(b []byte) error {
-	var jsonIntr jsonInterval
-	err := json.Unmarshal(b, &jsonIntr)
-	if err != nil {
-		return err
-	}
-
-	if jsonIntr.Start == nil {
-		return errors.New("missing \"start\" field")
-	}
-	if jsonIntr.End == nil {
-		return errors.New("missing \"end\" field")
-	}
-	if jsonIntr.Quality == nil {
-		return errors.New("missing \"quality\" field")
-	}
-
-	i.Start = *jsonIntr.Start
-	i.End = *jsonIntr.End
-	i.Quality = *jsonIntr.Quality
-	return nil
-}
-
-func toInterval(i validatingInterval) db.Interval {
-	return db.Interval{Id: i.Id, Start: i.Start, End: i.End, Quality: i.Quality}
-}
-
-func fromInterval(it db.Interval) validatingInterval {
-	var i validatingInterval
-	i.Id = it.Id
-	i.Start = it.Start
-	i.End = it.End
-	i.Quality = it.Quality
+func fromInterval(it db.Interval) interval {
+	var i interval
+	i.Id = &it.Id
+	i.Start = &it.Start
+	i.End = &it.End
+	i.Quality = &it.Quality
 	return i
 }
 
@@ -186,17 +156,20 @@ func (s *Server) CreateInterval(c echo.Context) error {
 		return errors.New("context field 'username' is not set or isn't of type string")
 	}
 
-	interval := validatingInterval{}
-	err := json.NewDecoder(c.Request().Body).Decode(&interval)
-	if err != nil {
+	interval := interval{}
+	if err := json.NewDecoder(c.Request().Body).Decode(&interval); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
-
-	if interval.Start.Compare(interval.End) != -1 {
-		return echo.NewHTTPError(http.StatusBadRequest, "interval end is the same or before start")
-	}
-	if interval.Quality < 1 || interval.Quality > 5 {
-		return echo.NewHTTPError(http.StatusBadRequest, "quality out of 1-5 range")
+	if err := validate.Struct(interval); err != nil {
+		var validationErrs validator.ValidationErrors
+		if errors.As(err, &validationErrs) {
+			for _, err := range validationErrs {
+				if msg, ok := validationMessages[fmt.Sprintf("%s %s", err.Field(), err.Tag())]; ok {
+					return echo.NewHTTPError(http.StatusBadRequest, msg)
+				}
+			}
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, err) // notest
 	}
 
 	i, err := s.db.AddInterval(username, toInterval(interval))
@@ -233,8 +206,7 @@ func (s *Server) GetIntervals(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	validatingIntervals := ut.Map(intervals, fromInterval)
-	return c.JSON(http.StatusOK, map[string]any{"intervals": validatingIntervals})
+	return c.JSON(http.StatusOK, map[string]any{"intervals": ut.Map(intervals, fromInterval)})
 }
 
 func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
