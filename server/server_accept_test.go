@@ -378,6 +378,13 @@ func testGetIntervals(t *testing.T) {
 			ExpectedBody:   intervalsToJson(t, []service.SleepInterval{}),
 		},
 		{
+			Name:           "EndBeforeStart",
+			IntervalsInDb:  []service.SleepInterval{},
+			Query:          makeValidQuery(intervalOne.End, intervalOne.Start),
+			ExpectedStatus: http.StatusBadRequest,
+			ExpectedBody:   jsonMes("interval end is the same or before start"),
+		},
+		{
 			Name:           "MissingQuery",
 			IntervalsInDb:  []service.SleepInterval{intervalOne},
 			Query:          "",

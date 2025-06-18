@@ -95,16 +95,9 @@ func (s *Service) AuthenticateUser(username, pass string) (bool, error) {
 
 func (s *Service) CreateInterval(username string, interval SleepInterval) (SleepInterval, error) {
 	if err := validate.Struct(interval); err != nil {
-		var validationErrs validator.ValidationErrors
-		if errors.As(err, &validationErrs) {
-			for _, verr := range validationErrs {
-				if msg, ok := validationMessages[fmt.Sprintf("%s %s", verr.Field(), verr.Tag())]; ok {
-					err = errors.New(msg)
-					break
-				}
-			}
-		}
-		return SleepInterval{}, ValidationError(err.Error())
+		return SleepInterval{}, ValidationError(
+			transformValidationError(err, getValidationErrorMessage).Error(),
+		)
 	}
 
 	dbInterval, err := s.db.AddInterval(username, toDbInterval(interval))
@@ -115,11 +108,36 @@ func (s *Service) CreateInterval(username string, interval SleepInterval) (Sleep
 }
 
 func (s *Service) GetIntervals(username string, i Interval) ([]SleepInterval, error) {
+	if err := validate.Struct(i); err != nil {
+		return nil, ValidationError(
+			transformValidationError(err, getValidationErrorMessage).Error(),
+		)
+	}
 	intervals, err := s.db.GetIntervals(username, i.Start, i.End)
 	if err != nil {
 		return nil, err
 	}
 	return utils.Map(intervals, fromDbInterval), nil
+}
+
+func transformValidationError(err error, transform func(field, tag string) error) error {
+	var validationErrs validator.ValidationErrors
+	if errors.As(err, &validationErrs) {
+		for _, verr := range validationErrs {
+			if err = transform(verr.Field(), verr.Tag()); err != nil {
+				break
+			}
+		}
+	}
+	return err
+}
+
+func getValidationErrorMessage(field, tag string) error {
+	var err error
+	if msg, ok := validationMessages[fmt.Sprintf("%s %s", field, tag)]; ok {
+		err = errors.New(msg)
+	}
+	return err
 }
 
 func fromDbInterval(i db.Interval) SleepInterval {

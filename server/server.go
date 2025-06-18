@@ -137,6 +137,9 @@ func (s *Server) GetIntervals(c echo.Context) error {
 
 	intervals, err := s.svc.GetIntervals(username, svc.Interval{Start: start, End: end})
 	if err != nil {
+		if _, ok := err.(svc.ValidationError); ok {
+			err = echo.NewHTTPError(http.StatusBadRequest, err)
+		}
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"intervals": ut.Map(intervals, fromSvcInterval)})
