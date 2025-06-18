@@ -11,7 +11,9 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
+	"github.com/zDonik1/sleep-track/database"
 	"github.com/zDonik1/sleep-track/server"
+	"github.com/zDonik1/sleep-track/service"
 )
 
 type Config struct {
@@ -60,13 +62,14 @@ func main() {
 	}
 
 	e := setupEcho(conf)
-	s := server.New()
-	if err = s.OpenDb(conf.DbSource); err != nil {
+	db := database.SqlDatabase{}
+	s := server.New(service.New(&db))
+	if err = db.Open(conf.DbSource); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	defer func() {
-		if err := s.CloseDb(); err != nil {
+		if err := db.Close(); err != nil {
 			panic(err)
 		}
 	}()

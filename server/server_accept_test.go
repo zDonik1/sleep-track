@@ -19,7 +19,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	db "github.com/zDonik1/sleep-track/database"
-	ut "github.com/zDonik1/sleep-track/utils"
+	"github.com/zDonik1/sleep-track/service"
+	"github.com/zDonik1/sleep-track/utils"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -43,6 +44,7 @@ var (
 
 type ServerSuite struct {
 	Ech  *echo.Echo
+	db   *db.SqlDatabase
 	Serv *Server
 	Rec  *httptest.ResponseRecorder
 	t    *testing.T
@@ -56,23 +58,24 @@ func (s *ServerSuite) setup(t *testing.T) {
 		s.Ech.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Format: "${time_rfc3339} " +
 			"http ${remote_ip} ${method} ${uri} => ${status} ${error}\n"}))
 	}
-	s.Serv = New()
+	s.db = &db.SqlDatabase{}
+	s.Serv = New(service.New(s.db))
 	s.Serv.now = func() time.Time { return TEST_TIME }
 	s.Rec = httptest.NewRecorder()
 	s.t = t
 
-	require.NoError(t, s.Serv.OpenDb(DB_SOURCE))
+	require.NoError(t, s.db.Open(DB_SOURCE))
 }
 
 func (s *ServerSuite) teardown() {
-	require.NoError(s.t, s.Serv.db.Wipe())
-	require.NoError(s.t, s.Serv.CloseDb())
+	require.NoError(s.t, s.db.Wipe())
+	require.NoError(s.t, s.db.Close())
 }
 
 func (s *ServerSuite) setupDbWithUser() {
-	hash, err := bcrypt.GenerateFromPassword([]byte(TEST_PASS), COST)
+	hash, err := bcrypt.GenerateFromPassword([]byte(TEST_PASS), service.COST)
 	require.NoError(s.t, err)
-	err = s.Serv.db.AddUser(db.User{Name: TEST_USER, PassHash: hash})
+	err = s.db.AddUser(db.User{Name: TEST_USER, PassHash: hash})
 	require.NoError(s.t, err)
 }
 
@@ -190,6 +193,7 @@ func testLoginUser(t *testing.T) {
 func testCreateInterval(t *testing.T) {
 	start := START
 	end := start.Add(8 * time.Hour)
+	interval := service.Interval{Start: start, End: end}
 
 	data := []struct {
 		Name           string
@@ -199,19 +203,22 @@ func testCreateInterval(t *testing.T) {
 	}{
 		{
 			Name:           "ValidInterval",
-			Body:           toJson(t, db.Interval{Start: start, End: end, Quality: 1}),
+			Body:           toJson(t, service.SleepInterval{Interval: interval, Quality: 1}),
 			ExpectedStatus: http.StatusCreated,
-			ExpectedBody:   toJson(t, db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
+			ExpectedBody:   toJson(t, service.SleepInterval{Interval: interval, Id: 1, Quality: 1}),
 		},
 		{
 			Name:           "IgnoreId",
-			Body:           toJson(t, db.Interval{Id: 10, Start: start, End: end, Quality: 1}),
+			Body:           toJson(t, service.SleepInterval{Interval: interval, Id: 10, Quality: 1}),
 			ExpectedStatus: http.StatusCreated,
-			ExpectedBody:   toJson(t, db.Interval{Id: 1, Start: start, End: end, Quality: 1}),
+			ExpectedBody:   toJson(t, service.SleepInterval{Interval: interval, Id: 1, Quality: 1}),
 		},
 		{
-			Name:           "EndBeforeStart",
-			Body:           toJson(t, db.Interval{Start: end, End: start, Quality: 1}),
+			Name: "EndBeforeStart",
+			Body: toJson(t, service.SleepInterval{
+				Interval: service.Interval{Start: interval.End, End: interval.Start},
+				Quality:  1,
+			}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("interval end is the same or before start"),
 		},
@@ -223,13 +230,13 @@ func testCreateInterval(t *testing.T) {
 		},
 		{
 			Name:           "QualityBelowRange",
-			Body:           toJson(t, db.Interval{Start: start, End: end, Quality: 0}),
+			Body:           toJson(t, service.SleepInterval{Interval: interval, Quality: 0}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
 		{
 			Name:           "QualityAboveRange",
-			Body:           toJson(t, db.Interval{Start: start, End: end, Quality: 10}),
+			Body:           toJson(t, service.SleepInterval{Interval: interval, Quality: 10}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
@@ -278,8 +285,8 @@ func testCreateInterval(t *testing.T) {
 }
 
 func testGetIntervals(t *testing.T) {
-	toJson := func(t *testing.T, intervals []db.Interval) string {
-		res, err := json.Marshal(map[string]any{"intervals": ut.Map(intervals, fromInterval)})
+	intervalsToJson := func(t *testing.T, intervals []service.SleepInterval) string {
+		res, err := json.Marshal(map[string]any{"intervals": utils.Map(intervals, fromSvcInterval)})
 		require.NoError(t, err)
 		return string(res) + "\n"
 	}
@@ -292,108 +299,108 @@ func testGetIntervals(t *testing.T) {
 		return makeQuery(start.Format(time.RFC3339), end.Format(time.RFC3339))
 	}
 
-	addId := func(interval db.Interval, id int64) db.Interval {
+	addId := func(interval service.SleepInterval, id int64) service.SleepInterval {
 		interval.Id = id
 		return interval
 	}
 
-	intervalOne := db.Interval{Start: START, End: START.Add(4 * time.Hour), Quality: 1}
+	intervalOne := service.SleepInterval{Interval: service.Interval{Start: START, End: START.Add(4 * time.Hour)}, Quality: 1}
 	intervalOneWithId := addId(intervalOne, 1)
-	intervalTwo := db.Interval{Start: START.Add(5 * time.Hour), End: START.Add(9 * time.Hour), Quality: 1}
+	intervalTwo := service.SleepInterval{Interval: service.Interval{Start: START.Add(5 * time.Hour), End: START.Add(9 * time.Hour)}, Quality: 1}
 	intervalTwoWithId := addId(intervalTwo, 2)
 
 	data := []struct {
 		Name           string
-		IntervalsInDb  []db.Interval
+		IntervalsInDb  []service.SleepInterval
 		Query          string
 		ExpectedStatus int
 		ExpectedBody   string
 	}{
 		{
 			Name:           "FullOverlap",
-			IntervalsInDb:  []db.Interval{intervalOne},
+			IntervalsInDb:  []service.SleepInterval{intervalOne},
 			Query:          makeValidQuery(intervalOne.Start, intervalOne.End),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson(t, []db.Interval{intervalOneWithId}),
+			ExpectedBody:   intervalsToJson(t, []service.SleepInterval{intervalOneWithId}),
 		},
 		{
 			Name:          "PartiaOverlap",
-			IntervalsInDb: []db.Interval{intervalOne},
+			IntervalsInDb: []service.SleepInterval{intervalOne},
 			Query: makeValidQuery(
 				intervalOne.Start.Add(2*time.Hour),
 				intervalOne.End.Add(2*time.Hour),
 			),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson(t, []db.Interval{intervalOneWithId}),
+			ExpectedBody:   intervalsToJson(t, []service.SleepInterval{intervalOneWithId}),
 		},
 		{
 			Name:           "EdgeOverlap",
-			IntervalsInDb:  []db.Interval{intervalOne},
+			IntervalsInDb:  []service.SleepInterval{intervalOne},
 			Query:          makeValidQuery(intervalOne.End, intervalOne.End.Add(4*time.Hour)),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson(t, []db.Interval{intervalOneWithId}),
+			ExpectedBody:   intervalsToJson(t, []service.SleepInterval{intervalOneWithId}),
 		},
 		{
 			Name:          "NoOverlap",
-			IntervalsInDb: []db.Interval{intervalOne},
+			IntervalsInDb: []service.SleepInterval{intervalOne},
 			Query: makeValidQuery(
 				intervalOne.End.Add(1*time.Hour),
 				intervalOne.End.Add(5*time.Hour),
 			),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson(t, []db.Interval{}),
+			ExpectedBody:   intervalsToJson(t, []service.SleepInterval{}),
 		},
 		{
 			Name:          "TwoIntervalOverlap",
-			IntervalsInDb: []db.Interval{intervalOne, intervalTwo},
+			IntervalsInDb: []service.SleepInterval{intervalOne, intervalTwo},
 			Query: makeValidQuery(
 				intervalOne.Start.Add(2*time.Hour),
 				intervalTwo.Start.Add(2*time.Hour),
 			),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson(t, []db.Interval{intervalOneWithId, intervalTwoWithId}),
+			ExpectedBody:   intervalsToJson(t, []service.SleepInterval{intervalOneWithId, intervalTwoWithId}),
 		},
 		{
 			Name:          "SortedByStartTime",
-			IntervalsInDb: []db.Interval{intervalTwo, intervalOne},
+			IntervalsInDb: []service.SleepInterval{intervalTwo, intervalOne},
 			Query: makeValidQuery(
 				intervalOne.Start.Add(2*time.Hour),
 				intervalTwo.Start.Add(2*time.Hour),
 			),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson(t, []db.Interval{addId(intervalOne, 2), addId(intervalTwo, 1)}),
+			ExpectedBody:   intervalsToJson(t, []service.SleepInterval{addId(intervalOne, 2), addId(intervalTwo, 1)}),
 		},
 		{
 			Name:           "NoIntervals",
-			IntervalsInDb:  []db.Interval{},
+			IntervalsInDb:  []service.SleepInterval{},
 			Query:          makeValidQuery(intervalOne.Start, intervalOne.End),
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   toJson(t, []db.Interval{}),
+			ExpectedBody:   intervalsToJson(t, []service.SleepInterval{}),
 		},
 		{
 			Name:           "MissingQuery",
-			IntervalsInDb:  []db.Interval{intervalOne},
+			IntervalsInDb:  []service.SleepInterval{intervalOne},
 			Query:          "",
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("missing 'start' query parameter"),
 		},
 		{
 			Name:           "MissingStartQueryParam",
-			IntervalsInDb:  []db.Interval{intervalOne},
+			IntervalsInDb:  []service.SleepInterval{intervalOne},
 			Query:          "?end=" + intervalOne.End.Format(time.RFC3339),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("missing 'start' query parameter"),
 		},
 		{
 			Name:           "MissingEndQueryParam",
-			IntervalsInDb:  []db.Interval{intervalOne},
+			IntervalsInDb:  []service.SleepInterval{intervalOne},
 			Query:          "?start=" + intervalOne.Start.Format(time.RFC3339),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("missing 'end' query parameter"),
 		},
 		{
 			Name:           "WrongStartFormat",
-			IntervalsInDb:  []db.Interval{intervalOne},
+			IntervalsInDb:  []service.SleepInterval{intervalOne},
 			Query:          makeQuery("wrongformat", intervalOne.End.Format(time.RFC3339)),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody: jsonMes(
@@ -403,7 +410,7 @@ func testGetIntervals(t *testing.T) {
 		},
 		{
 			Name:           "WrongEndFormat",
-			IntervalsInDb:  []db.Interval{intervalOne},
+			IntervalsInDb:  []service.SleepInterval{intervalOne},
 			Query:          makeQuery(intervalOne.Start.Format(time.RFC3339), "wrongformat"),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody: jsonMes(
@@ -420,7 +427,7 @@ func testGetIntervals(t *testing.T) {
 			defer s.teardown()
 			s.setupDbWithUser()
 			for _, i := range d.IntervalsInDb {
-				_, err := s.Serv.db.AddInterval(TEST_USER, i)
+				_, err := s.Serv.svc.CreateInterval(TEST_USER, i)
 				require.NoError(t, err)
 			}
 
@@ -518,8 +525,8 @@ func jsonMes(mes string) string {
 }
 
 func toJson(t *testing.T, v any) string {
-	if i, ok := v.(db.Interval); ok {
-		v = fromInterval(i)
+	if i, ok := v.(service.SleepInterval); ok {
+		v = fromSvcInterval(i)
 	}
 	res, err := json.Marshal(v)
 	require.NoError(t, err)

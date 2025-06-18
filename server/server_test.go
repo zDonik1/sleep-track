@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	db "github.com/zDonik1/sleep-track/database"
+	"github.com/zDonik1/sleep-track/service"
 )
 
 type MockDatabase struct{}
@@ -61,7 +62,7 @@ func TestUnitServer(t *testing.T) {
 func testMissingContextKeysInLoginUser(t *testing.T) {
 	t.Parallel()
 
-	keyvalues := map[string]interface{}{
+	keyvalues := map[string]any{
 		"user":    "someuser",
 		"created": false,
 	}
@@ -70,7 +71,7 @@ func testMissingContextKeysInLoginUser(t *testing.T) {
 		Name  string
 		Key   string
 		Type  string
-		Value interface{}
+		Value any
 	}{
 		{Name: "UserKey", Key: "user", Type: "string"},
 		{Name: "CreatedKey", Key: "created", Type: "bool"},
@@ -80,7 +81,7 @@ func testMissingContextKeysInLoginUser(t *testing.T) {
 		t.Run(d.Name, func(t *testing.T) {
 			t.Parallel()
 
-			serv := New()
+			serv := New(service.New(nil))
 			e := echo.New()
 			ctx := e.AcquireContext()
 			defer e.ReleaseContext(ctx)
@@ -118,7 +119,7 @@ func testMissingUsernameContextKey(t *testing.T) {
 		t.Run(d.Name, func(t *testing.T) {
 			t.Parallel()
 
-			serv := New()
+			serv := New(service.New(nil))
 			e := echo.New()
 			ctx := e.AcquireContext()
 			defer e.ReleaseContext(ctx)

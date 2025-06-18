@@ -5,122 +5,56 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
-	db "github.com/zDonik1/sleep-track/database"
+	svc "github.com/zDonik1/sleep-track/service"
 	ut "github.com/zDonik1/sleep-track/utils"
-	"golang.org/x/crypto/bcrypt"
 )
 
-var validate *validator.Validate = validator.New(validator.WithRequiredStructEnabled())
-
-var validationMessages map[string]string = map[string]string{
-	"Start required":   "missing \"start\" field",
-	"End required":     "missing \"end\" field",
-	"End gtfield":      "interval end is the same or before start",
-	"Quality required": "missing \"quality\" field",
-	"Quality gte":      "quality out of 1-5 range",
-	"Quality lte":      "quality out of 1-5 range",
-}
+var (
+	validate      *validator.Validate = validator.New(validator.WithRequiredStructEnabled())
+	key                               = []byte("secret")
+	jwtSignMethod                     = jwt.SigningMethodHS256
+)
 
 type interval struct {
 	Id      *int64     `json:"id,omitempty"`
 	Start   *time.Time `json:"start" validate:"required"`
-	End     *time.Time `json:"end" validate:"required,gtfield=Start"`
-	Quality *int       `json:"quality" validate:"required,gte=1,lte=5"`
+	End     *time.Time `json:"end" validate:"required"`
+	Quality *int       `json:"quality" validate:"required"`
 }
-
-func toInterval(i interval) db.Interval {
-	return db.Interval{Id: *i.Id, Start: *i.Start, End: *i.End, Quality: *i.Quality}
-}
-
-func fromInterval(it db.Interval) interval {
-	var i interval
-	i.Id = &it.Id
-	i.Start = &it.Start
-	i.End = &it.End
-	i.Quality = &it.Quality
-	return i
-}
-
-const (
-	COST = 8
-)
-
-var (
-	key           = []byte("secret")
-	jwtSignMethod = jwt.SigningMethodHS256
-)
 
 type Server struct {
-	db db.Database
+	svc svc.Service
 
 	now func() time.Time
 }
 
-func New() *Server {
+func New(svc svc.Service) *Server {
 	return &Server{
-		db: &db.SqlDatabase{},
+		svc: svc,
 		now: func() time.Time { // notest
 			return time.Now()
 		},
 	}
 }
 
-func (s *Server) OpenDb(source string) error {
-	return s.db.Open(source)
-}
-
-func (s *Server) CloseDb() error {
-	return s.db.Close()
-}
-
 func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, error) {
-	if username == "" {
-		return false, echo.NewHTTPError(
-			http.StatusUnauthorized,
-			"invalid username: the username is empty",
-		)
-	}
-	if pass == "" {
-		return false, echo.NewHTTPError(
-			http.StatusUnauthorized,
-			"invalid password: the password is empty",
-		)
-	}
-
-	exists, err := s.db.UserExists(username)
+	created, err := s.svc.AuthenticateUser(username, pass)
 	if err != nil {
+		if _, ok := err.(svc.UnauthorizedError); ok {
+			err = echo.NewHTTPError(http.StatusUnauthorized, err)
+		}
 		return false, err
 	}
 
-	if !exists {
-		hash, err := bcrypt.GenerateFromPassword([]byte(pass), COST)
-		if err != nil {
-			return false, err
-		}
-		err = s.db.AddUser(db.User{Name: username, PassHash: hash})
-		if err != nil {
-			return false, err
-		}
-		c.Logger().Infof("New user signed up: %s", username)
-	} else {
-		user, err := s.db.GetUser(username)
-		if err != nil {
-			return false, err
-		}
-
-		if err := bcrypt.CompareHashAndPassword(user.PassHash, []byte(pass)); err != nil {
-			return false, echo.NewHTTPError(http.StatusUnauthorized, err)
-		}
-		c.Logger().Infof("Existing user signed in: %s", username)
-	}
 	c.Set("user", username)
-	c.Set("created", !exists)
+	c.Set("created", created)
 	return true, nil
 }
 
@@ -163,20 +97,19 @@ func (s *Server) CreateInterval(c echo.Context) error {
 	if err := validate.Struct(interval); err != nil {
 		var validationErrs validator.ValidationErrors
 		if errors.As(err, &validationErrs) {
-			for _, err := range validationErrs {
-				if msg, ok := validationMessages[fmt.Sprintf("%s %s", err.Field(), err.Tag())]; ok {
-					return echo.NewHTTPError(http.StatusBadRequest, msg)
-				}
-			}
+			err = fmt.Errorf(`missing "%s" field`, strings.ToLower(validationErrs[0].Field()))
 		}
-		return echo.NewHTTPError(http.StatusBadRequest, err) // notest
+		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	i, err := s.db.AddInterval(username, toInterval(interval))
+	intr, err := s.svc.CreateInterval(username, toSvcInterval(interval))
 	if err != nil {
+		if _, ok := err.(svc.ValidationError); ok {
+			err = echo.NewHTTPError(http.StatusBadRequest, err)
+		}
 		return err
 	}
-	return c.JSON(http.StatusCreated, fromInterval(i))
+	return c.JSON(http.StatusCreated, fromSvcInterval(intr))
 }
 
 func (s *Server) GetIntervals(c echo.Context) error {
@@ -202,15 +135,15 @@ func (s *Server) GetIntervals(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	intervals, err := s.db.GetIntervals(username, start, end)
+	intervals, err := s.svc.GetIntervals(username, svc.Interval{Start: start, End: end})
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"intervals": ut.Map(intervals, fromInterval)})
+	return c.JSON(http.StatusOK, map[string]any{"intervals": ut.Map(intervals, fromSvcInterval)})
 }
 
 func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
-	// JWT middleware is wrapped with our UserVerification handler
+	// JWT middleware warps our UserVerification handler
 	// echo -> JWT -> UserVerification -> next
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		userVerification := func(c echo.Context) error {
@@ -222,7 +155,7 @@ func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
 			if err != nil {
 				return err
 			}
-			exists, err := s.db.UserExists(sub)
+			exists, err := s.svc.UserExists(sub)
 			if err != nil {
 				return err
 			}
@@ -240,8 +173,8 @@ func (s *Server) JwtMiddleware() echo.MiddlewareFunc {
 
 // Implementation taken from echojwt. Only necessary so we can pass custom time func
 // for parsing claims
-func (s *Server) parseTokenFunc(_ echo.Context, auth string) (interface{}, error) { // notest
-	keyFunc := func(token *jwt.Token) (interface{}, error) {
+func (s *Server) parseTokenFunc(_ echo.Context, auth string) (any, error) { // notest
+	keyFunc := func(token *jwt.Token) (any, error) {
 		if token.Method.Alg() != jwtSignMethod.Alg() {
 			return nil, &echojwt.TokenError{
 				Token: token,
@@ -263,4 +196,21 @@ func (s *Server) parseTokenFunc(_ echo.Context, auth string) (interface{}, error
 
 func addExpiryDuration(t time.Time) time.Time {
 	return t.Add(24 * time.Hour)
+}
+
+func fromSvcInterval(i svc.SleepInterval) interval {
+	return interval{
+		Id:      &i.Id,
+		Start:   &i.Start,
+		End:     &i.End,
+		Quality: &i.Quality,
+	}
+}
+
+func toSvcInterval(i interval) svc.SleepInterval {
+	return svc.SleepInterval{
+		Interval: svc.Interval{Start: *i.Start, End: *i.End},
+		Id:       *i.Id,
+		Quality:  *i.Quality,
+	}
 }
