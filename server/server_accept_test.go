@@ -44,7 +44,7 @@ var (
 
 type ServerSuite struct {
 	Ech  *echo.Echo
-	db   *db.SqlDatabase
+	db   db.Database
 	Serv *Server
 	Rec  *httptest.ResponseRecorder
 	t    *testing.T
@@ -58,7 +58,7 @@ func (s *ServerSuite) setup(t *testing.T) {
 		s.Ech.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Format: "${time_rfc3339} " +
 			"http ${remote_ip} ${method} ${uri} => ${status} ${error}\n"}))
 	}
-	s.db = &db.SqlDatabase{}
+	s.db = db.New()
 	s.Serv = New(service.New(s.db))
 	s.Serv.now = func() time.Time { return TEST_TIME }
 	s.Rec = httptest.NewRecorder()

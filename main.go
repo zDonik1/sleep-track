@@ -62,8 +62,8 @@ func main() {
 	}
 
 	e := setupEcho(conf)
-	db := database.SqlDatabase{}
-	s := server.New(service.New(&db))
+	db := database.New()
+	s := server.New(service.New(db))
 	if err = db.Open(conf.DbSource); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

@@ -39,12 +39,16 @@ type Database interface {
 	AddInterval(username string, i Interval) (Interval, error)
 }
 
-type SqlDatabase struct {
+func New() Database {
+	return &sqlDatabase{}
+}
+
+type sqlDatabase struct {
 	conn    *pgx.Conn
 	queries *sleepdb.Queries
 }
 
-func (d *SqlDatabase) Open(source string) error {
+func (d *sqlDatabase) Open(source string) error {
 	conn, err := pgx.Connect(context.Background(), source)
 	if err != nil {
 		return err
@@ -55,24 +59,24 @@ func (d *SqlDatabase) Open(source string) error {
 	return err
 }
 
-func (d *SqlDatabase) Close() error {
+func (d *sqlDatabase) Close() error {
 	return d.conn.Close(context.Background())
 }
 
-func (d *SqlDatabase) Wipe() error {
+func (d *sqlDatabase) Wipe() error {
 	return d.queries.Wipe(context.Background())
 }
 
-func (d *SqlDatabase) UserExists(username string) (bool, error) {
+func (d *sqlDatabase) UserExists(username string) (bool, error) {
 	return d.queries.UserExists(context.Background(), username)
 }
 
-func (d *SqlDatabase) GetUser(username string) (User, error) {
+func (d *sqlDatabase) GetUser(username string) (User, error) {
 	user, err := d.queries.GetUser(context.Background(), username)
 	return User{Name: user.Name, PassHash: user.Passhash}, err
 }
 
-func (d *SqlDatabase) GetIntervals(username string, start, end time.Time) ([]Interval, error) {
+func (d *sqlDatabase) GetIntervals(username string, start, end time.Time) ([]Interval, error) {
 	rows, err := d.queries.GetIntervals(context.Background(), sleepdb.GetIntervalsParams{
 		Username:  username,
 		Intrstart: pgtype.Timestamptz{Time: end, Valid: true},
@@ -99,14 +103,14 @@ func (d *SqlDatabase) GetIntervals(username string, start, end time.Time) ([]Int
 	return result, nil
 }
 
-func (d *SqlDatabase) AddUser(u User) error {
+func (d *sqlDatabase) AddUser(u User) error {
 	return d.queries.AddUser(context.Background(), sleepdb.AddUserParams{
 		Name:     u.Name,
 		Passhash: u.PassHash,
 	})
 }
 
-func (d *SqlDatabase) AddInterval(username string, i Interval) (Interval, error) {
+func (d *sqlDatabase) AddInterval(username string, i Interval) (Interval, error) {
 	id, err := d.queries.AddInterval(context.Background(), sleepdb.AddIntervalParams{
 		Intrstart: pgtype.Timestamptz{Time: i.Start, Valid: true},
 		Intrend:   pgtype.Timestamptz{Time: i.End, Valid: true},
