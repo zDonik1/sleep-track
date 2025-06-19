@@ -324,7 +324,7 @@ func testGetIntervals(t *testing.T) {
 			ExpectedBody:   intervalsToJson(t, []service.SleepInterval{intervalOneWithId}),
 		},
 		{
-			Name:          "PartiaOverlap",
+			Name:          "PartialOverlap",
 			IntervalsInDb: []service.SleepInterval{intervalOne},
 			Query: makeValidQuery(
 				intervalOne.Start.Add(2*time.Hour),

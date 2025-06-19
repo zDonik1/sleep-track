@@ -42,6 +42,7 @@
             pre-commit
             courtney
             golangci-lint
+            sqlc
           ];
         };
       }

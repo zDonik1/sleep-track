@@ -12,6 +12,11 @@ help:
 dev:
     nix develop -c nu
 
+# generate source files
+[group("nix develop")]
+gen:
+    nix develop -c go generate ./...
+
 # run tests
 [group("nix develop")]
 test *ARGS:

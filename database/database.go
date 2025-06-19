@@ -1,11 +1,20 @@
+//go:generate sqlc generate
+
 package database
 
 import (
 	"context"
+	_ "embed"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/zDonik1/sleep-track/database/sleepdb"
 )
+
+//go:embed schema.sql
+var schema string
 
 type User struct {
 	Name     string
@@ -24,29 +33,16 @@ type Database interface {
 	Close() error
 	Wipe() error
 	UserExists(username string) (bool, error)
-	GetUser(username string) (*User, error)
+	GetUser(username string) (User, error)
 	GetIntervals(username string, start, end time.Time) ([]Interval, error)
 	AddUser(u User) error
 	AddInterval(username string, i Interval) (Interval, error)
 }
 
-var schema = `
-CREATE TABLE IF NOT EXISTS Users (
-    Name TEXT PRIMARY KEY NOT NULL,
-    PassHash BYTEA NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS Intervals (
-    Id SERIAL PRIMARY KEY,
-    IntrStart TIMESTAMP WITH TIME ZONE NOT NULL,
-    IntrEnd TIMESTAMP WITH TIME ZONE NOT NULL,
-    Quality INTEGER NOT NULL,
-    Username TEXT,
-    FOREIGN KEY (Username) REFERENCES Users(Name)
-);
-`
-
-type SqlDatabase struct{ conn *pgx.Conn }
+type SqlDatabase struct {
+	conn    *pgx.Conn
+	queries *sleepdb.Queries
+}
 
 func (d *SqlDatabase) Open(source string) error {
 	conn, err := pgx.Connect(context.Background(), source)
@@ -55,6 +51,7 @@ func (d *SqlDatabase) Open(source string) error {
 	}
 	d.conn = conn
 	_, err = d.conn.Exec(context.Background(), schema)
+	d.queries = sleepdb.New(conn)
 	return err
 }
 
@@ -63,93 +60,59 @@ func (d *SqlDatabase) Close() error {
 }
 
 func (d *SqlDatabase) Wipe() error {
-	_, err := d.conn.Exec(
-		context.Background(),
-		"DROP TABLE IF EXISTS Intervals; DROP TABLE IF EXISTS Users",
-	)
-	return err
+	return d.queries.Wipe(context.Background())
 }
 
 func (d *SqlDatabase) UserExists(username string) (bool, error) {
-	var name string
-	err := d.conn.QueryRow(
-		context.Background(),
-		"SELECT Name FROM Users WHERE Name = $1",
-		username,
-	).Scan(&name)
-	if err == pgx.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
+	return d.queries.UserExists(context.Background(), username)
 }
 
-func (d *SqlDatabase) GetUser(username string) (*User, error) {
-	var name string
-	var hash []byte
-	err := d.conn.QueryRow(
-		context.Background(),
-		"SELECT Name, PassHash FROM Users WHERE Name = $1",
-		username,
-	).Scan(&name, &hash)
-	if err != nil {
-		return nil, err
-	}
-	return &User{Name: name, PassHash: hash}, nil
+func (d *SqlDatabase) GetUser(username string) (User, error) {
+	user, err := d.queries.GetUser(context.Background(), username)
+	return User{Name: user.Name, PassHash: user.Passhash}, err
 }
 
 func (d *SqlDatabase) GetIntervals(username string, start, end time.Time) ([]Interval, error) {
-	rows, err := d.conn.Query(
-		context.Background(),
-		`SELECT Id, IntrStart AT TIME ZONE 'UTC', IntrEnd AT TIME ZONE 'UTC', Quality FROM Intervals
-		WHERE Username = $1 AND (IntrStart <= $2 AND IntrEnd >= $3)
-		ORDER BY IntrStart`,
-		username, end, start,
-	)
+	rows, err := d.queries.GetIntervals(context.Background(), sleepdb.GetIntervalsParams{
+		Username:  username,
+		Intrstart: pgtype.Timestamptz{Time: end, Valid: true},
+		Intrend:   pgtype.Timestamptz{Time: start, Valid: true},
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	result := make([]Interval, 0)
-	for rows.Next() {
-		var i Interval
-		err := rows.Scan(&i.Id, &i.Start, &i.End, &i.Quality)
-		if err != nil {
-			return nil, err
+	for _, v := range rows {
+		start, sok := v.Timezone.(time.Time)
+		end, eok := v.Timezone_2.(time.Time)
+		if !sok || !eok { // notest
+			return nil, errors.New("could not cast timezone field to Time type")
 		}
-		result = append(result, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+		result = append(result, Interval{
+			Id:      int64(v.ID),
+			Start:   start,
+			End:     end,
+			Quality: int(v.Quality),
+		})
 	}
 	return result, nil
 }
 
 func (d *SqlDatabase) AddUser(u User) error {
-	_, err := d.conn.Exec(
-		context.Background(),
-		"INSERT INTO Users VALUES ($1,$2)",
-		u.Name, u.PassHash,
-	)
-	if err != nil {
-		return err
-	}
-	return nil
+	return d.queries.AddUser(context.Background(), sleepdb.AddUserParams{
+		Name:     u.Name,
+		Passhash: u.PassHash,
+	})
 }
 
 func (d *SqlDatabase) AddInterval(username string, i Interval) (Interval, error) {
-	var id int64
-	err := d.conn.QueryRow(
-		context.Background(),
-		`INSERT INTO Intervals (IntrStart, IntrEnd, Quality, Username)
-		VALUES ($1,$2,$3,$4) RETURNING Id`,
-		i.Start, i.End, i.Quality, username,
-	).Scan(&id)
-	if err != nil {
-		return Interval{}, err
-	}
-	i.Id = id
+	id, err := d.queries.AddInterval(context.Background(), sleepdb.AddIntervalParams{
+		Intrstart: pgtype.Timestamptz{Time: i.Start, Valid: true},
+		Intrend:   pgtype.Timestamptz{Time: i.End, Valid: true},
+		Quality:   int32(i.Quality),
+		Username:  username,
+	})
+	i.Id = int64(id)
 	return i, err
 }
