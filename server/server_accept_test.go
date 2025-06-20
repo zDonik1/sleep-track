@@ -18,7 +18,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	db "github.com/zDonik1/sleep-track/database"
+	repo "github.com/zDonik1/sleep-track/repository"
 	"github.com/zDonik1/sleep-track/service"
 	"github.com/zDonik1/sleep-track/utils"
 	"golang.org/x/crypto/bcrypt"
@@ -44,7 +44,7 @@ var (
 
 type ServerSuite struct {
 	Ech  *echo.Echo
-	db   db.Database
+	db   repo.Database
 	Serv *Server
 	Rec  *httptest.ResponseRecorder
 	t    *testing.T
@@ -58,7 +58,7 @@ func (s *ServerSuite) setup(t *testing.T) {
 		s.Ech.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Format: "${time_rfc3339} " +
 			"http ${remote_ip} ${method} ${uri} => ${status} ${error}\n"}))
 	}
-	s.db = db.New()
+	s.db = repo.New()
 	s.Serv = New(service.New(s.db))
 	s.Serv.now = func() time.Time { return TEST_TIME }
 	s.Rec = httptest.NewRecorder()
@@ -75,7 +75,7 @@ func (s *ServerSuite) teardown() {
 func (s *ServerSuite) setupDbWithUser() {
 	hash, err := bcrypt.GenerateFromPassword([]byte(TEST_PASS), service.COST)
 	require.NoError(s.t, err)
-	err = s.db.AddUser(db.User{Name: TEST_USER, PassHash: hash})
+	err = s.db.AddUser(repo.User{Name: TEST_USER, PassHash: hash})
 	require.NoError(s.t, err)
 }
 

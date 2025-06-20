@@ -1,6 +1,6 @@
 //go:generate sqlc generate
 
-package database
+package repository
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/zDonik1/sleep-track/database/sleepdb"
+	"github.com/zDonik1/sleep-track/repository/sleepdb"
 )
 
 //go:embed schema.sql

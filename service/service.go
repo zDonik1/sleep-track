@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
-	db "github.com/zDonik1/sleep-track/database"
+	repo "github.com/zDonik1/sleep-track/repository"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -47,10 +47,10 @@ type SleepInterval struct {
 }
 
 type Service struct {
-	db db.Database
+	db repo.Database
 }
 
-func New(db db.Database) Service {
+func New(db repo.Database) Service {
 	return Service{db: db}
 }
 
@@ -76,7 +76,7 @@ func (s *Service) AuthenticateUser(username, pass string) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		err = s.db.AddUser(db.User{Name: username, PassHash: hash})
+		err = s.db.AddUser(repo.User{Name: username, PassHash: hash})
 		if err != nil {
 			return false, err
 		}
@@ -140,7 +140,7 @@ func getValidationErrorMessage(field, tag string) error {
 	return err
 }
 
-func fromDbInterval(i db.Interval) SleepInterval {
+func fromDbInterval(i repo.Interval) SleepInterval {
 	return SleepInterval{
 		Interval: Interval{Start: i.Start, End: i.End},
 		Id:       i.Id,
@@ -148,8 +148,8 @@ func fromDbInterval(i db.Interval) SleepInterval {
 	}
 }
 
-func toDbInterval(i SleepInterval) db.Interval {
-	return db.Interval{
+func toDbInterval(i SleepInterval) repo.Interval {
+	return repo.Interval{
 		Id:      i.Id,
 		Start:   i.Start,
 		End:     i.End,

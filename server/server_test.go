@@ -8,7 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
-	db "github.com/zDonik1/sleep-track/database"
+	repo "github.com/zDonik1/sleep-track/repository"
 	"github.com/zDonik1/sleep-track/service"
 )
 
@@ -24,20 +24,20 @@ func (d MockDatabase) UserExists(username string) (bool, error) {
 	return false, nil
 }
 
-func (d MockDatabase) GetUser(username string) (*db.User, error) {
-	return &db.User{}, nil
+func (d MockDatabase) GetUser(username string) (*repo.User, error) {
+	return &repo.User{}, nil
 }
 
-func (d MockDatabase) GetIntervals(username string, start, end time.Time) ([]db.Interval, error) {
-	return []db.Interval{}, nil
+func (d MockDatabase) GetIntervals(username string, start, end time.Time) ([]repo.Interval, error) {
+	return []repo.Interval{}, nil
 }
 
-func (d MockDatabase) AddUser(u db.User) error {
+func (d MockDatabase) AddUser(u repo.User) error {
 	return nil
 }
 
-func (d MockDatabase) AddInterval(username string, i db.Interval) (db.Interval, error) {
-	return db.Interval{}, nil
+func (d MockDatabase) AddInterval(username string, i repo.Interval) (repo.Interval, error) {
+	return repo.Interval{}, nil
 }
 
 func TestUnitServer(t *testing.T) {

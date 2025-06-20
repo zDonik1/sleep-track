@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
-	"github.com/zDonik1/sleep-track/database"
+	repo "github.com/zDonik1/sleep-track/repository"
 	"github.com/zDonik1/sleep-track/server"
 	"github.com/zDonik1/sleep-track/service"
 )
@@ -62,7 +62,7 @@ func main() {
 	}
 
 	e := setupEcho(conf)
-	db := database.New()
+	db := repo.New()
 	s := server.New(service.New(db))
 	if err = db.Open(conf.DbSource); err != nil {
 		fmt.Println(err)
