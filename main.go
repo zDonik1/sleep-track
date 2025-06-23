@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
@@ -62,17 +64,25 @@ func main() {
 	}
 
 	e := setupEcho(conf)
-	db := repo.New()
-	s := server.New(service.New(db))
-	if err = db.Open(conf.DbSource); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+
+	conn, err := pgx.Connect(context.Background(), conf.DbSource)
+	if err != nil {
+		e.Logger.Fatal(err)
 	}
 	defer func() {
-		if err := db.Close(); err != nil {
-			panic(err)
+		if err := conn.Close(context.Background()); err != nil {
+			e.Logger.Fatal(err)
 		}
 	}()
+	_, err = conn.Exec(context.Background(), repo.Schema)
+	if err != nil {
+		e.Logger.Fatal(err)
+	}
+
+	s := server.New(service.Service{
+		UserRepo:     repo.NewPsqlUserRepo(conn),
+		IntervalRepo: repo.NewPsqlIntervalRepo(conn),
+	})
 
 	e.POST("/login", s.LoginUser, middleware.BasicAuth(s.AuthenticateUser))
 

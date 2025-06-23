@@ -8,37 +8,14 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
-	repo "github.com/zDonik1/sleep-track/repository"
 	"github.com/zDonik1/sleep-track/service"
 )
 
 type MockDatabase struct{}
 
-func (d MockDatabase) Open(source string) error {
-	return nil
-}
-
-func (d MockDatabase) Close() {}
-
-func (d MockDatabase) UserExists(username string) (bool, error) {
-	return false, nil
-}
-
-func (d MockDatabase) GetUser(username string) (*repo.User, error) {
-	return &repo.User{}, nil
-}
-
-func (d MockDatabase) GetIntervals(username string, start, end time.Time) ([]repo.Interval, error) {
-	return []repo.Interval{}, nil
-}
-
-func (d MockDatabase) AddUser(u repo.User) error {
-	return nil
-}
-
-func (d MockDatabase) AddInterval(username string, i repo.Interval) (repo.Interval, error) {
-	return repo.Interval{}, nil
-}
+func (d MockDatabase) Open(source string) error { return nil }
+func (d MockDatabase) Close() error             { return nil }
+func (d MockDatabase) Wipe() error              { return nil }
 
 func TestUnitServer(t *testing.T) {
 	t.Parallel()
@@ -81,7 +58,7 @@ func testMissingContextKeysInLoginUser(t *testing.T) {
 		t.Run(d.Name, func(t *testing.T) {
 			t.Parallel()
 
-			serv := New(service.New(nil))
+			serv := New(service.Service{})
 			e := echo.New()
 			ctx := e.AcquireContext()
 			defer e.ReleaseContext(ctx)
@@ -119,7 +96,7 @@ func testMissingUsernameContextKey(t *testing.T) {
 		t.Run(d.Name, func(t *testing.T) {
 			t.Parallel()
 
-			serv := New(service.New(nil))
+			serv := New(service.Service{})
 			e := echo.New()
 			ctx := e.AcquireContext()
 			defer e.ReleaseContext(ctx)

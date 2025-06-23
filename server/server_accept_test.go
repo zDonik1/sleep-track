@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
@@ -18,10 +20,11 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	repo "github.com/zDonik1/sleep-track/repository"
+	"github.com/zDonik1/sleep-track/repository/sleepdb"
 	"github.com/zDonik1/sleep-track/service"
 	"github.com/zDonik1/sleep-track/utils"
-	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -44,7 +47,7 @@ var (
 
 type ServerSuite struct {
 	Ech  *echo.Echo
-	db   repo.Database
+	conn *pgx.Conn
 	Serv *Server
 	Rec  *httptest.ResponseRecorder
 	t    *testing.T
@@ -58,24 +61,31 @@ func (s *ServerSuite) setup(t *testing.T) {
 		s.Ech.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Format: "${time_rfc3339} " +
 			"http ${remote_ip} ${method} ${uri} => ${status} ${error}\n"}))
 	}
-	s.db = repo.New()
-	s.Serv = New(service.New(s.db))
+
+	conn, err := pgx.Connect(context.Background(), DB_SOURCE)
+	require.NoError(t, err)
+	_, err = conn.Exec(context.Background(), repo.Schema)
+	require.NoError(t, err)
+	s.conn = conn
+
+	s.Serv = New(service.Service{
+		UserRepo:     repo.NewPsqlUserRepo(s.conn),
+		IntervalRepo: repo.NewPsqlIntervalRepo(s.conn),
+	})
 	s.Serv.now = func() time.Time { return TEST_TIME }
+
 	s.Rec = httptest.NewRecorder()
 	s.t = t
-
-	require.NoError(t, s.db.Open(DB_SOURCE))
 }
 
 func (s *ServerSuite) teardown() {
-	require.NoError(s.t, s.db.Wipe())
-	require.NoError(s.t, s.db.Close())
+	require.NoError(s.t, sleepdb.New(s.conn).Wipe(context.Background()))
+	require.NoError(s.t, s.conn.Close(context.Background()))
 }
 
 func (s *ServerSuite) setupDbWithUser() {
-	hash, err := bcrypt.GenerateFromPassword([]byte(TEST_PASS), service.COST)
-	require.NoError(s.t, err)
-	err = s.db.AddUser(repo.User{Name: TEST_USER, PassHash: hash})
+	created, err := s.Serv.svc.AuthenticateUser(TEST_USER, TEST_PASS)
+	require.True(s.t, created)
 	require.NoError(s.t, err)
 }
 

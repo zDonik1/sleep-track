@@ -47,15 +47,12 @@ type SleepInterval struct {
 }
 
 type Service struct {
-	db repo.Database
-}
-
-func New(db repo.Database) Service {
-	return Service{db: db}
+	UserRepo     repo.UserRepository
+	IntervalRepo repo.IntervalRepository
 }
 
 func (s *Service) UserExists(username string) (bool, error) {
-	return s.db.UserExists(username)
+	return s.UserRepo.Exists(username)
 }
 
 func (s *Service) AuthenticateUser(username, pass string) (bool, error) {
@@ -76,12 +73,12 @@ func (s *Service) AuthenticateUser(username, pass string) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		err = s.db.AddUser(repo.User{Name: username, PassHash: hash})
+		err = s.UserRepo.Add(repo.User{Name: username, PassHash: hash})
 		if err != nil {
 			return false, err
 		}
 	} else {
-		user, err := s.db.GetUser(username)
+		user, err := s.UserRepo.Get(username)
 		if err != nil {
 			return false, err
 		}
@@ -100,7 +97,7 @@ func (s *Service) CreateInterval(username string, interval SleepInterval) (Sleep
 		)
 	}
 
-	dbInterval, err := s.db.AddInterval(username, toDbInterval(interval))
+	dbInterval, err := s.IntervalRepo.Add(username, toDbInterval(interval))
 	if err != nil {
 		return SleepInterval{}, err
 	}
@@ -113,7 +110,7 @@ func (s *Service) GetIntervals(username string, i Interval) ([]SleepInterval, er
 			transformValidationError(err, getValidationErrorMessage).Error(),
 		)
 	}
-	intervals, err := s.db.GetIntervals(username, i.Start, i.End)
+	intervals, err := s.IntervalRepo.Get(username, i.Start, i.End)
 	if err != nil {
 		return nil, err
 	}
