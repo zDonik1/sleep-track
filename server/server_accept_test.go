@@ -46,19 +46,19 @@ var (
 )
 
 type ServerSuite struct {
-	Ech  *echo.Echo
+	ech  *echo.Echo
 	conn *pgx.Conn
-	Serv *Server
-	Rec  *httptest.ResponseRecorder
+	serv *Server
+	rec  *httptest.ResponseRecorder
 	t    *testing.T
 }
 
 func (s *ServerSuite) setup(t *testing.T) {
-	s.Ech = echo.New()
+	s.ech = echo.New()
 	if viper.GetBool("verbose") {
-		s.Ech.Logger.SetLevel(log.DEBUG)
-		s.Ech.Logger.SetHeader("${time_rfc3339} ${level} ${prefix} ${short_file}:${line}")
-		s.Ech.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Format: "${time_rfc3339} " +
+		s.ech.Logger.SetLevel(log.DEBUG)
+		s.ech.Logger.SetHeader("${time_rfc3339} ${level} ${prefix} ${short_file}:${line}")
+		s.ech.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Format: "${time_rfc3339} " +
 			"http ${remote_ip} ${method} ${uri} => ${status} ${error}\n"}))
 	}
 
@@ -68,13 +68,13 @@ func (s *ServerSuite) setup(t *testing.T) {
 	require.NoError(t, err)
 	s.conn = conn
 
-	s.Serv = New(service.Service{
+	s.serv = New(service.Service{
 		UserRepo:     repo.NewPsqlUserRepo(s.conn),
 		IntervalRepo: repo.NewPsqlIntervalRepo(s.conn),
 	})
-	s.Serv.now = func() time.Time { return TEST_TIME }
+	s.serv.now = func() time.Time { return TEST_TIME }
 
-	s.Rec = httptest.NewRecorder()
+	s.rec = httptest.NewRecorder()
 	s.t = t
 }
 
@@ -84,7 +84,7 @@ func (s *ServerSuite) teardown() {
 }
 
 func (s *ServerSuite) setupDbWithUser() {
-	created, err := s.Serv.svc.AuthenticateUser(TEST_USER, TEST_PASS)
+	created, err := s.serv.svc.AuthenticateUser(TEST_USER, TEST_PASS)
 	require.True(s.t, created)
 	require.NoError(s.t, err)
 }
@@ -186,16 +186,16 @@ func testLoginUser(t *testing.T) {
 			if d.SetupUser {
 				s.setupDbWithUser()
 			}
-			s.Ech.POST("/login", s.Serv.LoginUser, middleware.BasicAuth(s.Serv.AuthenticateUser))
+			s.ech.POST("/login", s.serv.LoginUser, middleware.BasicAuth(s.serv.AuthenticateUser))
 			req := httptest.NewRequest(http.MethodPost, "/login", nil)
 			if d.SetupBasicAuth {
 				req.SetBasicAuth(d.Username, d.Password)
 			}
 
-			s.Ech.ServeHTTP(s.Rec, req)
+			s.ech.ServeHTTP(s.rec, req)
 
-			assert.Equal(t, d.ExpectedStatus, s.Rec.Code)
-			assert.Equal(t, d.ExpectedBody, s.Rec.Body.String())
+			assert.Equal(t, d.ExpectedStatus, s.rec.Code)
+			assert.Equal(t, d.ExpectedBody, s.rec.Body.String())
 		})
 	}
 }
@@ -282,14 +282,14 @@ func testCreateInterval(t *testing.T) {
 			s.setup(t)
 			defer s.teardown()
 			s.setupDbWithUser()
-			s.Ech.POST("/intervals", s.Serv.CreateInterval, s.Serv.JwtMiddleware())
+			s.ech.POST("/intervals", s.serv.CreateInterval, s.serv.JwtMiddleware())
 			req := httptest.NewRequest(http.MethodPost, "/intervals", strings.NewReader(d.Body))
 			req.Header.Add("Authorization", "Bearer "+EXPECTED_JWT)
 
-			s.Ech.ServeHTTP(s.Rec, req)
+			s.ech.ServeHTTP(s.rec, req)
 
-			assert.Equal(t, d.ExpectedStatus, s.Rec.Result().StatusCode)
-			assert.Equal(t, d.ExpectedBody, s.Rec.Body.String())
+			assert.Equal(t, d.ExpectedStatus, s.rec.Result().StatusCode)
+			assert.Equal(t, d.ExpectedBody, s.rec.Body.String())
 		})
 	}
 }
@@ -444,18 +444,18 @@ func testGetIntervals(t *testing.T) {
 			defer s.teardown()
 			s.setupDbWithUser()
 			for _, i := range d.IntervalsInDb {
-				_, err := s.Serv.svc.CreateInterval(TEST_USER, i)
+				_, err := s.serv.svc.CreateInterval(TEST_USER, i)
 				require.NoError(t, err)
 			}
 
-			s.Ech.GET("/intervals", s.Serv.GetIntervals, s.Serv.JwtMiddleware())
+			s.ech.GET("/intervals", s.serv.GetIntervals, s.serv.JwtMiddleware())
 			req := httptest.NewRequest(http.MethodGet, "/intervals"+d.Query, nil)
 			req.Header.Add("Authorization", "Bearer "+EXPECTED_JWT)
 
-			s.Ech.ServeHTTP(s.Rec, req)
+			s.ech.ServeHTTP(s.rec, req)
 
-			assert.Equal(t, d.ExpectedStatus, s.Rec.Result().StatusCode)
-			assert.Equal(t, d.ExpectedBody, s.Rec.Body.String())
+			assert.Equal(t, d.ExpectedStatus, s.rec.Result().StatusCode)
+			assert.Equal(t, d.ExpectedBody, s.rec.Body.String())
 		})
 
 	}
@@ -514,21 +514,21 @@ func testJwtMiddleware(t *testing.T) {
 			if d.SetupUser {
 				s.setupDbWithUser()
 			}
-			s.Ech.POST(
+			s.ech.POST(
 				"/temp",
 				func(c echo.Context) error {
 					assert.Fail(t, "should never reach handler")
 					return nil
 				},
-				s.Serv.JwtMiddleware(),
+				s.serv.JwtMiddleware(),
 			)
 			req := httptest.NewRequest(http.MethodPost, "/temp", nil)
 			req.Header.Add("Authorization", "Bearer "+d.Jwt)
 
-			s.Ech.ServeHTTP(s.Rec, req)
+			s.ech.ServeHTTP(s.rec, req)
 
-			assert.Equal(t, d.ExpectedStatus, s.Rec.Result().StatusCode)
-			assert.Equal(t, d.ExpectedBody, s.Rec.Body.String())
+			assert.Equal(t, d.ExpectedStatus, s.rec.Result().StatusCode)
+			assert.Equal(t, d.ExpectedBody, s.rec.Body.String())
 		})
 	}
 }
