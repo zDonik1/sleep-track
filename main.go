@@ -30,7 +30,7 @@ func setupConfig() (*Config, error) {
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
 		return nil, err
 	}
-	viper.SetDefault("db-source", "./sleep-track.db")
+	viper.SetDefault("db-source", "dbname=sleeptrack")
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, err
 	}
