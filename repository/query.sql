@@ -16,10 +16,10 @@ FROM Intervals
 WHERE Username = $1 AND (IntrStart <= $2 AND IntrEnd >= $3)
 ORDER BY IntrStart;
 
--- name: AddUser :exec
+-- name: CreateUser :exec
 INSERT INTO Users(Name, PassHash) VALUES ($1,$2);
 
--- name: AddInterval :one
+-- name: CreateInterval :one
 INSERT INTO Intervals (IntrStart, IntrEnd, Quality, Username)
 VALUES ($1,$2,$3,$4)
 RETURNING Id;

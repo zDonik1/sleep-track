@@ -73,7 +73,7 @@ func (s *Service) AuthenticateUser(username, pass string) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		err = s.UserRepo.Add(repo.User{Name: username, PassHash: hash})
+		err = s.UserRepo.Create(repo.User{Name: username, PassHash: hash})
 		if err != nil {
 			return false, err
 		}
@@ -97,7 +97,7 @@ func (s *Service) CreateInterval(username string, interval SleepInterval) (Sleep
 		)
 	}
 
-	dbInterval, err := s.IntervalRepo.Add(username, toDbInterval(interval))
+	dbInterval, err := s.IntervalRepo.Create(username, toDbInterval(interval))
 	if err != nil {
 		return SleepInterval{}, err
 	}

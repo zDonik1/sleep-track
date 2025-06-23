@@ -18,7 +18,7 @@ type Interval struct {
 
 type IntervalRepository interface {
 	Get(username string, start, end time.Time) ([]Interval, error)
-	Add(username string, i Interval) (Interval, error)
+	Create(username string, i Interval) (Interval, error)
 }
 
 func NewPsqlIntervalRepo(db sleepdb.DBTX) IntervalRepository {
@@ -57,13 +57,16 @@ func (q *psqlIntervalRepository) Get(username string, start, end time.Time) ([]I
 	return result, nil
 }
 
-func (q *psqlIntervalRepository) Add(username string, i Interval) (Interval, error) {
-	id, err := (*sleepdb.Queries)(q).AddInterval(context.Background(), sleepdb.AddIntervalParams{
-		Intrstart: pgtype.Timestamptz{Time: i.Start, Valid: true},
-		Intrend:   pgtype.Timestamptz{Time: i.End, Valid: true},
-		Quality:   int32(i.Quality),
-		Username:  username,
-	})
+func (q *psqlIntervalRepository) Create(username string, i Interval) (Interval, error) {
+	id, err := (*sleepdb.Queries)(q).CreateInterval(
+		context.Background(),
+		sleepdb.CreateIntervalParams{
+			Intrstart: pgtype.Timestamptz{Time: i.Start, Valid: true},
+			Intrend:   pgtype.Timestamptz{Time: i.End, Valid: true},
+			Quality:   int32(i.Quality),
+			Username:  username,
+		},
+	)
 	i.Id = int64(id)
 	return i, err
 }

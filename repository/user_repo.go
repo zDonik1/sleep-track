@@ -14,7 +14,7 @@ type User struct {
 type UserRepository interface {
 	Exists(username string) (bool, error)
 	Get(username string) (User, error)
-	Add(u User) error
+	Create(u User) error
 }
 
 func NewPsqlUserRepo(db sleepdb.DBTX) UserRepository {
@@ -32,8 +32,8 @@ func (q *psqlUserRepository) Get(username string) (User, error) {
 	return User{Name: user.Name, PassHash: user.Passhash}, err
 }
 
-func (q *psqlUserRepository) Add(u User) error {
-	return (*sleepdb.Queries)(q).AddUser(context.Background(), sleepdb.AddUserParams{
+func (q *psqlUserRepository) Create(u User) error {
+	return (*sleepdb.Queries)(q).CreateUser(context.Background(), sleepdb.CreateUserParams{
 		Name:     u.Name,
 		Passhash: u.PassHash,
 	})
