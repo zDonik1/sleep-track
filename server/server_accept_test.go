@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	repo "github.com/zDonik1/sleep-track/repository"
-	"github.com/zDonik1/sleep-track/repository/sleepdb"
+	"github.com/zDonik1/sleep-track/repository/psqldb"
 	"github.com/zDonik1/sleep-track/service"
 	"github.com/zDonik1/sleep-track/utils"
 )
@@ -64,7 +64,7 @@ func (s *ServerSuite) setup(t *testing.T) {
 
 	conn, err := pgx.Connect(context.Background(), DB_SOURCE)
 	require.NoError(t, err)
-	_, err = conn.Exec(context.Background(), repo.Schema)
+	_, err = conn.Exec(context.Background(), repo.PsqlSchema)
 	require.NoError(t, err)
 	s.conn = conn
 
@@ -79,7 +79,7 @@ func (s *ServerSuite) setup(t *testing.T) {
 }
 
 func (s *ServerSuite) teardown() {
-	require.NoError(s.t, sleepdb.New(s.conn).Wipe(context.Background()))
+	require.NoError(s.t, psqldb.New(s.conn).Wipe(context.Background()))
 	require.NoError(s.t, s.conn.Close(context.Background()))
 }
 

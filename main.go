@@ -74,7 +74,7 @@ func main() {
 			e.Logger.Fatal(err)
 		}
 	}()
-	_, err = conn.Exec(context.Background(), repo.Schema)
+	_, err = conn.Exec(context.Background(), repo.PsqlSchema)
 	if err != nil {
 		e.Logger.Fatal(err)
 	}

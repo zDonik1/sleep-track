@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/zDonik1/sleep-track/repository/sleepdb"
+	"github.com/zDonik1/sleep-track/repository/psqldb"
 )
 
 type Interval struct {
@@ -21,16 +21,16 @@ type IntervalRepository interface {
 	Create(username string, i Interval) (Interval, error)
 }
 
-func NewPsqlIntervalRepo(db sleepdb.DBTX) IntervalRepository {
-	return (*psqlIntervalRepository)(sleepdb.New(db))
+func NewPsqlIntervalRepo(db psqldb.DBTX) IntervalRepository {
+	return (*psqlIntervalRepository)(psqldb.New(db))
 }
 
-type psqlIntervalRepository sleepdb.Queries
+type psqlIntervalRepository psqldb.Queries
 
 func (q *psqlIntervalRepository) Get(username string, start, end time.Time) ([]Interval, error) {
-	rows, err := (*sleepdb.Queries)(q).GetIntervals(
+	rows, err := (*psqldb.Queries)(q).GetIntervals(
 		context.Background(),
-		sleepdb.GetIntervalsParams{
+		psqldb.GetIntervalsParams{
 			Username:  username,
 			Intrstart: pgtype.Timestamptz{Time: end, Valid: true},
 			Intrend:   pgtype.Timestamptz{Time: start, Valid: true},
@@ -58,9 +58,9 @@ func (q *psqlIntervalRepository) Get(username string, start, end time.Time) ([]I
 }
 
 func (q *psqlIntervalRepository) Create(username string, i Interval) (Interval, error) {
-	id, err := (*sleepdb.Queries)(q).CreateInterval(
+	id, err := (*psqldb.Queries)(q).CreateInterval(
 		context.Background(),
-		sleepdb.CreateIntervalParams{
+		psqldb.CreateIntervalParams{
 			Intrstart: pgtype.Timestamptz{Time: i.Start, Valid: true},
 			Intrend:   pgtype.Timestamptz{Time: i.End, Valid: true},
 			Quality:   int32(i.Quality),

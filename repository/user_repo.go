@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 
-	"github.com/zDonik1/sleep-track/repository/sleepdb"
+	"github.com/zDonik1/sleep-track/repository/psqldb"
 )
 
 type User struct {
@@ -17,23 +17,23 @@ type UserRepository interface {
 	Create(u User) error
 }
 
-func NewPsqlUserRepo(db sleepdb.DBTX) UserRepository {
-	return (*psqlUserRepository)(sleepdb.New(db))
+func NewPsqlUserRepo(db psqldb.DBTX) UserRepository {
+	return (*psqlUserRepository)(psqldb.New(db))
 }
 
-type psqlUserRepository sleepdb.Queries
+type psqlUserRepository psqldb.Queries
 
 func (q *psqlUserRepository) Exists(username string) (bool, error) {
-	return (*sleepdb.Queries)(q).UserExists(context.Background(), username)
+	return (*psqldb.Queries)(q).UserExists(context.Background(), username)
 }
 
 func (q *psqlUserRepository) Get(username string) (User, error) {
-	user, err := (*sleepdb.Queries)(q).GetUser(context.Background(), username)
+	user, err := (*psqldb.Queries)(q).GetUser(context.Background(), username)
 	return User{Name: user.Name, PassHash: user.Passhash}, err
 }
 
 func (q *psqlUserRepository) Create(u User) error {
-	return (*sleepdb.Queries)(q).CreateUser(context.Background(), sleepdb.CreateUserParams{
+	return (*psqldb.Queries)(q).CreateUser(context.Background(), psqldb.CreateUserParams{
 		Name:     u.Name,
 		Passhash: u.PassHash,
 	})

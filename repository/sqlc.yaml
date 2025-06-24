@@ -1,10 +1,10 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    queries: "query.sql"
-    schema: "schema.sql"
+    queries: "psql_query.sql"
+    schema: "psql_schema.sql"
     gen:
       go:
-        package: "sleepdb"
-        out: "sleepdb"
+        package: "psqldb"
+        out: "psqldb"
         sql_package: "pgx/v5"
