@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -23,12 +25,12 @@ import (
 
 	repo "github.com/zDonik1/sleep-track/repository"
 	"github.com/zDonik1/sleep-track/repository/psqldb"
+	"github.com/zDonik1/sleep-track/repository/sqlitedb"
 	"github.com/zDonik1/sleep-track/service"
 	"github.com/zDonik1/sleep-track/utils"
 )
 
 const (
-	DB_SOURCE    = ""
 	TEST_USER    = "testuser"
 	TEST_PASS    = "testpass"
 	ANOTHER_PASS = "otherpass"
@@ -47,6 +49,7 @@ var (
 
 type ServerSuite struct {
 	ech  *echo.Echo
+	db   *sql.DB
 	conn *pgx.Conn
 	serv *Server
 	rec  *httptest.ResponseRecorder
@@ -62,16 +65,30 @@ func (s *ServerSuite) setup(t *testing.T) {
 			"http ${remote_ip} ${method} ${uri} => ${status} ${error}\n"}))
 	}
 
-	conn, err := pgx.Connect(context.Background(), DB_SOURCE)
-	require.NoError(t, err)
-	_, err = conn.Exec(context.Background(), repo.PsqlSchema)
-	require.NoError(t, err)
-	s.conn = conn
+	var userRepo repo.UserRepository
+	var intervalRepo repo.IntervalRepository
+	switch strings.Split(t.Name(), "/")[1] {
+	case "Sqlite":
+		db, err := sql.Open("sqlite3", ":memory:")
+		require.NoError(t, err)
+		_, err = db.Exec(repo.SqliteSchema)
+		require.NoError(t, err)
+		s.db = db
+		userRepo = repo.NewSqliteUserRepo(s.db)
+		intervalRepo = repo.NewSqliteIntervalRepo(s.db)
+	case "Postgres":
+		conn, err := pgx.Connect(context.Background(), "")
+		require.NoError(t, err)
+		_, err = conn.Exec(context.Background(), repo.PsqlSchema)
+		require.NoError(t, err)
+		s.conn = conn
+		userRepo = repo.NewPsqlUserRepo(s.conn)
+		intervalRepo = repo.NewPsqlIntervalRepo(s.conn)
+	default:
+		s.ech.Logger.Fatalf("wrong database entered")
+	}
 
-	s.serv = New(service.Service{
-		UserRepo:     repo.NewPsqlUserRepo(s.conn),
-		IntervalRepo: repo.NewPsqlIntervalRepo(s.conn),
-	})
+	s.serv = New(service.Service{UserRepo: userRepo, IntervalRepo: intervalRepo})
 	s.serv.now = func() time.Time { return TEST_TIME }
 
 	s.rec = httptest.NewRecorder()
@@ -79,8 +96,17 @@ func (s *ServerSuite) setup(t *testing.T) {
 }
 
 func (s *ServerSuite) teardown() {
-	require.NoError(s.t, psqldb.New(s.conn).Wipe(context.Background()))
-	require.NoError(s.t, s.conn.Close(context.Background()))
+	switch strings.Split(s.t.Name(), "/")[1] {
+	case "Sqlite":
+		require.NoError(s.t, sqlitedb.New(s.db).WipeUsers(context.Background()))
+		require.NoError(s.t, sqlitedb.New(s.db).WipeIntervals(context.Background()))
+		require.NoError(s.t, s.db.Close())
+	case "Postgres":
+		require.NoError(s.t, psqldb.New(s.conn).Wipe(context.Background()))
+		require.NoError(s.t, s.conn.Close(context.Background()))
+	default:
+		s.t.FailNow()
+	}
 }
 
 func (s *ServerSuite) setupDbWithUser() {
@@ -90,9 +116,6 @@ func (s *ServerSuite) setupDbWithUser() {
 }
 
 func TestAcceptServer(t *testing.T) {
-	if os.Getenv("INTEGRATION") == "0" {
-		t.SkipNow()
-	}
 	t.Parallel()
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
@@ -106,9 +129,21 @@ func TestAcceptServer(t *testing.T) {
 		"JwtMiddleware":  testJwtMiddleware,
 	}
 
-	for name, test := range tests {
-		t.Run(name, test)
-	}
+	t.Run("Sqlite", func(t *testing.T) {
+		t.Parallel()
+		for name, test := range tests {
+			t.Run(name, test)
+		}
+	})
+	t.Run("Postgres", func(t *testing.T) {
+		if os.Getenv("INTEGRATION") != "1" {
+			t.SkipNow()
+		}
+		t.Parallel()
+		for name, test := range tests {
+			t.Run(name, test)
+		}
+	})
 }
 
 // testLoginUser also tests AuthenticateUser middleware since it is only used in this endpoint

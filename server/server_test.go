@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -19,7 +18,6 @@ func (d MockDatabase) Wipe() error              { return nil }
 
 func TestUnitServer(t *testing.T) {
 	t.Parallel()
-	integration := os.Getenv("INTEGRATION")
 
 	tests := map[string](func(t *testing.T)){
 		"MissingUsernameContextKey":     testMissingUsernameContextKey,
@@ -27,12 +25,8 @@ func TestUnitServer(t *testing.T) {
 		"AddExpiryDuration":             testAddExpiryDuration,
 	}
 
-	if integration != "1" {
-		for name, test := range tests {
-			t.Run(name, test)
-		}
-	} else {
-		t.SkipNow()
+	for name, test := range tests {
+		t.Run(name, test)
 	}
 }
 

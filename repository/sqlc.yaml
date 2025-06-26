@@ -8,3 +8,10 @@ sql:
         package: "psqldb"
         out: "psqldb"
         sql_package: "pgx/v5"
+  - engine: "sqlite"
+    queries: "sqlite_query.sql"
+    schema: "sqlite_schema.sql"
+    gen:
+      go:
+        package: "sqlitedb"
+        out: "sqlitedb"
