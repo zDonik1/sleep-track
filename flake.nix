@@ -2,12 +2,17 @@
   description = "Go tests.";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
   outputs =
-    { nixpkgs, flake-utils, ... }:
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      ...
+    }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
@@ -33,17 +38,96 @@
             # for some reason the tests are failing
             doCheck = false;
           };
+
+        commonEnv = {
+          PGHOST = "localhost";
+          PGPORT = "5433";
+          PGUSER = "postgres";
+          PGPASSWORD = "testpass";
+        };
       in
       {
-        devShells.default = pkgs.mkShell {
-          packages = with pkgs; [
-            go
-            gotest
-            pre-commit
-            courtney
-            golangci-lint
-            sqlc
-          ];
+        devShells.default =
+          pkgs.mkShell {
+            packages = with pkgs; [
+              go
+              gotest
+              pre-commit
+              courtney
+              golangci-lint
+              sqlc
+            ];
+          }
+          // commonEnv;
+
+        packages = rec {
+          default = sleep-track;
+
+          sleep-track = pkgs.buildGoModule {
+            name = "sleep-track";
+            vendorHash = "sha256-hd4UkMTfDAiMA2ulqN3iFwg4MG5BdLgO+S+NZ8Sk+Kk=";
+            src = ./.;
+            preBuild = "go generate ./...";
+
+            nativeBuildInputs = with pkgs; [ sqlc ];
+          };
+
+          test-postgres-container =
+            let
+              containerName = "test-postgres";
+            in
+            pkgs.writeShellScriptBin "run-db" ''
+              docker rm -f ${containerName} 2>/dev/null || true
+              docker run \
+                  -d \
+                  --name ${containerName} \
+                  -e POSTGRES_PASSWORD=${commonEnv.PGPASSWORD} \
+                  -p ${commonEnv.PGPORT}:5432 \
+                  postgres:17.5
+            '';
+
+          sleep-track-test-runner =
+            let
+              sleepTrackTestRunner = sleep-track.overrideAttrs (prev: {
+                buildPhase = ''
+                  runHook preBuild
+                  go test -c ./server
+                  runHook postBuild
+                '';
+
+                installPhase = ''
+                  runHook preInstall
+                  mkdir -p $out/bin
+                  cp ./server.test $out/bin/
+                  runHook postInstall
+                '';
+
+                doCheck = false;
+              });
+            in
+            pkgs.writeShellScriptBin "run-full-test-suite" ''
+              INTEGRATION=1 \
+              PGHOST=${commonEnv.PGHOST} \
+              PGPORT=${commonEnv.PGPORT} \
+              PGUSER=${commonEnv.PGUSER} \
+              PGPASSWORD=${commonEnv.PGPASSWORD} \
+              ${sleepTrackTestRunner}/bin/server.test -test.v 
+            '';
+        };
+      }
+    )
+    // (
+      let
+        system = "x86_64-linux";
+        pkgs = import nixpkgs { inherit system; };
+      in
+      {
+        dockerImages."${system}".sleep-track = pkgs.dockerTools.buildLayeredImage {
+          name = "ghcr.io/zDonik1/sleep-track";
+          config = {
+            Entrypoint = [ "${self.packages.x86_64-linux.sleep-track}/bin/sleep-track" ];
+            ExposedPorts."80/tcp" = { };
+          };
         };
       }
     );
