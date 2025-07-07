@@ -44,6 +44,10 @@ func New(svc svc.Service) *Server {
 	}
 }
 
+func (s *Server) Health(c echo.Context) error {
+	return c.NoContent(http.StatusOK)
+}
+
 func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, error) {
 	created, err := s.svc.AuthenticateUser(username, pass)
 	if err != nil {

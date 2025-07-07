@@ -84,6 +84,7 @@ func main() {
 		IntervalRepo: repo.NewPsqlIntervalRepo(conn),
 	})
 
+	e.GET("/health", s.Health)
 	e.POST("/login", s.LoginUser, middleware.BasicAuth(s.AuthenticateUser))
 
 	intervalsGroup := e.Group("/intervals", s.JwtMiddleware())

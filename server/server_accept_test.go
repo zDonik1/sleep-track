@@ -123,6 +123,7 @@ func TestAcceptServer(t *testing.T) {
 	require.NoError(t, viper.BindPFlags(pflag.CommandLine))
 
 	tests := map[string](func(t *testing.T)){
+		"HealthReady":    testHealthReady,
 		"LoginUser":      testLoginUser,
 		"CreateInterval": testCreateInterval,
 		"GetIntervals":   testGetIntervals,
@@ -144,6 +145,20 @@ func TestAcceptServer(t *testing.T) {
 			t.Run(name, test)
 		}
 	})
+}
+
+func testHealthReady(t *testing.T) {
+	s := ServerSuite{}
+	s.setup(t)
+	defer s.teardown()
+
+	s.ech.GET("/health", s.serv.Health)
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+
+	s.ech.ServeHTTP(s.rec, req)
+
+	assert.Equal(t, http.StatusOK, s.rec.Code)
+	assert.Equal(t, "", s.rec.Body.String())
 }
 
 // testLoginUser also tests AuthenticateUser middleware since it is only used in this endpoint
