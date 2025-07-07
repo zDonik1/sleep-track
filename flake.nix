@@ -76,7 +76,7 @@
             let
               containerName = "test-postgres";
             in
-            pkgs.writeShellScriptBin "run-db" ''
+            pkgs.writeShellScriptBin "run-postgres" ''
               docker rm -f ${containerName} 2>/dev/null || true
               docker run \
                   -d \
@@ -126,7 +126,7 @@
           name = "ghcr.io/zDonik1/sleep-track";
           config = {
             Entrypoint = [ "${self.packages.x86_64-linux.sleep-track}/bin/sleep-track" ];
-            ExposedPorts."80/tcp" = { };
+            ExposedPorts."8001/tcp" = { };
           };
         };
       }
