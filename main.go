@@ -20,7 +20,6 @@ import (
 
 type Config struct {
 	LogFormat string `mapstructure:"log-format"`
-	DbSource  string `mapstructure:"db-source"`
 }
 
 func setupConfig() (*Config, error) {
@@ -28,10 +27,6 @@ func setupConfig() (*Config, error) {
 	pflag.StringP("log-format", "l", "text", "Set log format [text, json]")
 	pflag.Parse()
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
-		return nil, err
-	}
-	viper.SetDefault("db-source", "dbname=sleeptrack")
-	if err := viper.Unmarshal(&config); err != nil {
 		return nil, err
 	}
 
@@ -65,7 +60,7 @@ func main() {
 
 	e := setupEcho(conf)
 
-	conn, err := pgx.Connect(context.Background(), conf.DbSource)
+	conn, err := pgx.Connect(context.Background(), "")
 	if err != nil {
 		e.Logger.Fatal(err)
 	}
