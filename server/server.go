@@ -215,9 +215,13 @@ func fromSvcInterval(i svc.SleepInterval) interval {
 }
 
 func toSvcInterval(i interval) svc.SleepInterval {
+	var id int64 = 0
+	if i.Id != nil {
+		id = *i.Id
+	}
 	return svc.SleepInterval{
 		Interval: svc.Interval{Start: *i.Start, End: *i.End},
-		Id:       *i.Id,
+		Id:       id,
 		Quality:  *i.Quality,
 	}
 }

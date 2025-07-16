@@ -20,7 +20,7 @@ gen:
 # run tests
 [group("nix develop")]
 test *ARGS:
-    nix develop -c gotest ./server -count=1 {{ ARGS }}
+    INTEGRATION=1 nix develop -c gotest ./server -count=1 {{ ARGS }}
 
 # run tests in development mode
 [group("nix develop")]

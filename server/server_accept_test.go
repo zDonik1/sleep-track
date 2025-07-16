@@ -253,7 +253,8 @@ func testLoginUser(t *testing.T) {
 func testCreateInterval(t *testing.T) {
 	start := START
 	end := start.Add(8 * time.Hour)
-	interval := service.Interval{Start: start, End: end}
+	intr := service.Interval{Start: start, End: end}
+	qual := 1
 
 	data := []struct {
 		Name           string
@@ -263,20 +264,20 @@ func testCreateInterval(t *testing.T) {
 	}{
 		{
 			Name:           "ValidInterval",
-			Body:           toJson(t, service.SleepInterval{Interval: interval, Quality: 1}),
+			Body:           toJson(t, interval{Start: &intr.Start, End: &intr.End, Quality: &qual}),
 			ExpectedStatus: http.StatusCreated,
-			ExpectedBody:   toJson(t, service.SleepInterval{Interval: interval, Id: 1, Quality: 1}),
+			ExpectedBody:   toJson(t, service.SleepInterval{Interval: intr, Id: 1, Quality: 1}),
 		},
 		{
 			Name:           "IgnoreId",
-			Body:           toJson(t, service.SleepInterval{Interval: interval, Id: 10, Quality: 1}),
+			Body:           toJson(t, service.SleepInterval{Interval: intr, Id: 10, Quality: 1}),
 			ExpectedStatus: http.StatusCreated,
-			ExpectedBody:   toJson(t, service.SleepInterval{Interval: interval, Id: 1, Quality: 1}),
+			ExpectedBody:   toJson(t, service.SleepInterval{Interval: intr, Id: 1, Quality: 1}),
 		},
 		{
 			Name: "EndBeforeStart",
 			Body: toJson(t, service.SleepInterval{
-				Interval: service.Interval{Start: interval.End, End: interval.Start},
+				Interval: service.Interval{Start: intr.End, End: intr.Start},
 				Quality:  1,
 			}),
 			ExpectedStatus: http.StatusBadRequest,
@@ -290,13 +291,13 @@ func testCreateInterval(t *testing.T) {
 		},
 		{
 			Name:           "QualityBelowRange",
-			Body:           toJson(t, service.SleepInterval{Interval: interval, Quality: 0}),
+			Body:           toJson(t, service.SleepInterval{Interval: intr, Quality: 0}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
 		{
 			Name:           "QualityAboveRange",
-			Body:           toJson(t, service.SleepInterval{Interval: interval, Quality: 10}),
+			Body:           toJson(t, service.SleepInterval{Interval: intr, Quality: 10}),
 			ExpectedStatus: http.StatusBadRequest,
 			ExpectedBody:   jsonMes("quality out of 1-5 range"),
 		},
