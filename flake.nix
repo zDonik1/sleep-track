@@ -8,7 +8,6 @@
 
   outputs =
     {
-      self,
       nixpkgs,
       flake-utils,
       ...
@@ -46,7 +45,7 @@
           PGPASSWORD = "testpass";
         };
       in
-      {
+      rec {
         devShells.default =
           pkgs.mkShell {
             packages = with pkgs; [
@@ -114,18 +113,12 @@
               ${sleepTrackTestRunner}/bin/server.test -test.v 
             '';
         };
-      }
-    )
-    // (
-      let
-        system = "x86_64-linux";
-        pkgs = import nixpkgs { inherit system; };
-      in
-      {
-        dockerImages."${system}".sleep-track = pkgs.dockerTools.buildLayeredImage {
-          name = "ghcr.io/zDonik1/sleep-track";
+
+        dockerImages.sleep-track = pkgs.dockerTools.buildLayeredImage {
+          name = "sleep-track";
+          tag = "v0.1.0";
           config = {
-            Entrypoint = [ "${self.packages.x86_64-linux.sleep-track}/bin/sleep-track" ];
+            Entrypoint = [ "${packages.sleep-track}/bin/sleep-track" ];
             ExposedPorts."8001/tcp" = { };
           };
         };
