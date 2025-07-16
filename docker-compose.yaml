@@ -1,0 +1,40 @@
+services:
+  traefik:
+    image: traefik:v3.4.4
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "8080:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  postgresql:
+    image: postgres:17.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: mypass
+
+  sleep-track:
+    image: sleep-track:v0.1.0
+    restart: unless-stopped
+    labels:
+      - traefik.http.routers.sleep-track.rule=PathPrefix(`/`) && !PathPrefix(`/docs`)
+    environment:
+      - PGHOST=postgresql
+      - PGDATABASE=postgres
+      - PGUSER=postgres
+      - PGPASSWORD=mypass
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui:v5.26.2
+    restart: unless-stopped
+    labels:
+      - traefik.http.routers.swagger-ui.rule=PathPrefix(`/docs`)
+    environment:
+      - BASE_URL=/docs
+      - PORT=80
+      - SWAGGER_JSON=/data/openapi.yaml
+    volumes:
+      - ./openapi.yaml:/data/openapi.yaml
