@@ -1,0 +1,178 @@
+openapi: 3.1.1
+
+info:
+  title: Sleep tracker API
+  description: API description for the sleep tracker service.
+  version: 0.1.0
+
+servers:
+  - url: /
+    description: The main production server.
+
+paths:
+  /health:
+    get:
+      summary: Check health of server.
+      responses:
+        "200":
+          description: Server is running.
+  /login:
+    post:
+      summary: Sign up or login user.
+      security:
+        - basicAuth: []
+      responses:
+        "201":
+          description: User created.
+          content:
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/Jwt"
+        "200":
+          description: User logged in.
+          content:
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/Jwt"
+        "401":
+          description: Invalid credentials.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: "invalid username: the username is empty"
+  /intervals:
+    get:
+      summary: Get sleep intervarls.
+      security:
+        - jwtAuth: []
+      parameters:
+        - in: query
+          name: start
+          schema:
+            $ref: "#/components/schemas/DateTime"
+          required: true
+          example: "2024-01-12T15:04:05+07:00"
+        - in: query
+          name: end
+          schema:
+            $ref: "#/components/schemas/DateTime"
+          required: true
+          example: "2024-01-13T05:04:05+07:00"
+      responses:
+        "200":
+          description: Successfully retrieved intervals.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  intervals:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Interval"
+                example:
+                  intervals:
+                    - id: 1
+                      start: "2024-01-12T15:04:05+07:00"
+                      end: "2024-01-13T05:04:05+07:00"
+                      quality: 5
+        "400":
+          description: Query parameters invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: "interval end is the same or before start"
+        "401":
+          $ref: "#/components/responses/InvalidJwt"
+    post:
+      summary: Create sleep intervarls.
+      security:
+        - jwtAuth: []
+      requestBody:
+        description: Create interval. Passing the id of the interval is not necessary.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Interval"
+            example:
+              start: "2024-01-12T15:04:05+07:00"
+              end: "2024-01-13T05:04:05+07:00"
+              quality: 5
+      responses:
+        "201":
+          description: Successfully created interval.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Interval"
+              example:
+                # todo try shrinking
+                - id: 1
+                  start: "2024-01-12T15:04:05+07:00"
+                  end: "2024-01-13T05:04:05+07:00"
+                  quality: 5
+        "400":
+          description: Interval validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              example:
+                message: "interval end is the same or before start"
+        "401":
+          $ref: "#/components/responses/InvalidJwt"
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    InvalidJwt:
+      description: Unauthorized due to invalid JWT token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Message"
+          example:
+            message: "invalid or expired jwt"
+
+  schemas:
+    Jwt:
+      type: string
+      example: >
+        eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.
+        eyJleHAiOjE3NTI2NTc4NDcsInN1YiI6Im15dXNlciJ9.
+        pl8j7sFVsYPv5v-roU_ToZ_urgTiFlDXH7CN0aOT-cw
+    Message:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Error message.
+    DateTime:
+      type: string
+      format: date-time
+    Interval:
+      type: object
+      properties:
+        id:
+          type: integer
+        start:
+          $ref: "#/components/schemas/DateTime"
+        end:
+          $ref: "#/components/schemas/DateTime"
+        quality:
+          type: integer
+          minimum: 1
+          maximum: 5
