@@ -12,14 +12,17 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
+	"github.com/zDonik1/sleep-track/docs"
 	svc "github.com/zDonik1/sleep-track/service"
 	ut "github.com/zDonik1/sleep-track/utils"
+	"gopkg.in/yaml.v3"
 )
 
 var (
 	validate      *validator.Validate = validator.New(validator.WithRequiredStructEnabled())
 	key                               = []byte("secret")
 	jwtSignMethod                     = jwt.SigningMethodHS256
+	apiJson       []byte
 )
 
 type interval struct {
@@ -46,6 +49,22 @@ func New(svc svc.Service) *Server {
 
 func (s *Server) Health(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
+}
+
+func (s *Server) OpenApiSpec(c echo.Context) error {
+	if apiJson == nil {
+		var data map[string]any
+		err := yaml.Unmarshal(docs.ApiYaml, &data)
+		if err != nil {
+			return fmt.Errorf("failed unmarshalling OpenAPI YAML spec: %w", err)
+		}
+
+		apiJson, err = json.Marshal(data)
+		if err != nil {
+			return fmt.Errorf("failed marshalling OpenAPI JSON spec: %w", err)
+		}
+	}
+	return c.JSONBlob(http.StatusOK, apiJson)
 }
 
 func (s *Server) AuthenticateUser(username, pass string, c echo.Context) (bool, error) {

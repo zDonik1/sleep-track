@@ -83,6 +83,7 @@ func main() {
 	})
 
 	e.GET("/health", s.Health)
+	e.GET("/openapi.json", s.OpenApiSpec)
 	e.POST("/login", s.LoginUser, middleware.BasicAuth(s.AuthenticateUser))
 
 	intervalsGroup := e.Group("/intervals", s.JwtMiddleware())

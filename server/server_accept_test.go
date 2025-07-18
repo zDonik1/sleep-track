@@ -124,6 +124,7 @@ func TestAcceptServer(t *testing.T) {
 
 	tests := map[string](func(t *testing.T)){
 		"HealthReady":    testHealthReady,
+		"OpenApiSpec":    testOpenApiSpec,
 		"LoginUser":      testLoginUser,
 		"CreateInterval": testCreateInterval,
 		"GetIntervals":   testGetIntervals,
@@ -159,6 +160,22 @@ func testHealthReady(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, s.rec.Code)
 	assert.Equal(t, "", s.rec.Body.String())
+}
+
+func testOpenApiSpec(t *testing.T) {
+	s := ServerSuite{}
+	s.setup(t)
+	defer s.teardown()
+
+	s.ech.GET("/openapi.json", s.serv.OpenApiSpec)
+	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+
+	s.ech.ServeHTTP(s.rec, req)
+
+	assert.Equal(t, http.StatusOK, s.rec.Code)
+	var apiSpec map[string]any
+	assert.NoError(t, json.Unmarshal(s.rec.Body.Bytes(), &apiSpec))
+	assert.Equal(t, "3.1.1", apiSpec["openapi"])
 }
 
 // testLoginUser also tests AuthenticateUser middleware since it is only used in this endpoint
