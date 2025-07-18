@@ -36,3 +36,11 @@ run:
 [group("nix develop")]
 lint:
     nix develop -c ./.hooks/golangci-lint.sh
+
+# ----
+
+[group("build")]
+build-image:
+    nix build .#dockerImages.aarch64-linux.sleep-track \
+        --builders "linxux-builder aarch64-linux /etc/nix/builder_ed25519"
+    docker load < result

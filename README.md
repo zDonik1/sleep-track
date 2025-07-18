@@ -13,8 +13,10 @@ A showcase of a simple RESTful API server written in Go for storing and tracking
 ## Docker
 The docker compose deployment is only meant for development and not production. It does not have persistence of the database by default.
 
-Simply run
+Build the image and start docker with compose
 ```sh
+nix build .#dockerImages.x86_64-linux.sleep-track
+docker load < result
 docker compose up -d
 ```
 
